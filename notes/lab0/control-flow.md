@@ -55,9 +55,9 @@ fork1() → fork()
                                                           write(1,"hi",2)
                               sys_write → filewrite → consolewrite
                               either_copyin → uartwrite
-                              LSR.TX_IDLE? → WriteReg(THR,'h') … 'i'
-                                             否则 sleep(&tx_chan)，
-                                             由 uartintr 唤醒
+                              sleep_prepare(&tx_chan)
+                              LSR.TX_IDLE? → 是：WriteReg(THR,'h') … 'i'
+                                             否：sleep()，由 uartintr 唤醒
                                                           write(1,"\n",1)
                                                           exit(0)
                               kexit：fileclose ×3 → reparent
@@ -151,7 +151,9 @@ fork1() → fork()
 | D11 | 父进程回收 | sh 的 `kwait` 从 `sleep()` 返回 → 重扫 `proc[]` → `pp->state == ZOMBIE` → 取 `pid`、`copyout` 退出码 → `pp->parent = 0` → `freeproc(pp)` 释放 trapframe 页与页表 → 返回 `pid` | K-stack(2) | S | `wait_lock` + `pp->lock` |
 | D12 | 回到主循环 | sh 的 `main` 继续 `while(getcmd(...))`，重新打印 `$ ` | U-stack(2) | U | — |
 
-> 💭 D5 与旧版差异极大。旧版 `uartputc` 把字符塞进环形缓冲 `uart_tx_buf` 后立即返回，由 `uartstart()` 在中断驱动下逐个吐出，写者只在缓冲满时才睡；本版**没有发送缓冲区**，`uartwrite` 直接轮询 `LSR_TX_IDLE` 写 `THR`，写不进去就睡在 `tx_chan` 上等 `uartintr` 唤醒。因此本版控制台输出是**同步**的：`write` 返回时字符已经进了 THR。这也意味着 `uartwrite` 用的是**睡眠锁**而非自旋锁——它会睡，不能持自旋锁。
+> 💭 D5 与旧版差异极大。旧版 `uartputc` 把字符塞进环形缓冲 `uart_tx_buf` 后立即返回，由 `uartstart()` 在中断驱动下逐个吐出，写者只在缓冲满时才睡；本版**没有发送缓冲区**，`uartwrite` 直接轮询 `LSR_TX_IDLE` 写 `THR`，写不进去就睡在 `tx_chan` 上等 `uartintr` 唤醒。语义因此收紧了一档：`write()` 返回时，全部字节**已被写入 THR**，而不是像旧版那样只是"进了软件队列、等中断慢慢吐"。但要注意这**不等于**字符已完成物理发送——THR 里最后那个字节仍在移位寄存器中传输，`uartwrite` 不会等它发完。这也意味着 `uartwrite` 用的是**睡眠锁**而非自旋锁——它会睡，不能持自旋锁。
+
+另注意两段式睡眠在这里的用法：`sleep_prepare(&tx_chan)` 被放在**检查 `LSR` 之前**（`uart.c`），先登记通道再查状态。若顺序反过来，"查到忙"与"睡下"之间来的那次发送完成中断就会丢失。
 
 ---
 

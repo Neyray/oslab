@@ -21,12 +21,20 @@
 
 `proc[]` 槽位按 `allocproc()` 从低到高扫描 `UNUSED` 的顺序分配：init 落在 `proc[0]`，init fork 出的 shell 落在 `proc[1]`，sh fork 出的子进程落在 `proc[2]`。
 
+**关于快照的确定性**：下表描述的是**系统进入稳定等待状态后的典型截面**。其中 `state` 一列受调度时序影响，不是可以从代码静态断言的量：
+
+- `echo` 处于 `RUNNING` 是本截面的定义使然——`kexec` 刚返回，它必然正占用某个核。
+- `init` 与 `sh` 标为 `SLEEPING`，前提是二者都已走完 `kwait()` 的 `sleep_prepare(p) → release(&wait_lock) → sleep()`。在多核（`-smp 2`）或极短的时间窗内，`sh` 可能尚停在 `kwait` 的扫描循环里而仍是 `RUNNING`/`RUNNABLE`；`kfork` 返回到 `sh` 用户态、再陷入 `wait` 也需要若干指令。
+- 其余各行（槽位、`pid`、`parent`、`pagetable`、`kstack`、`ofile[]`）由 `allocproc` / `kfork` / `kexec` 的代码路径唯一决定，与调度时序无关。
+
+现场若被追问"如何证明这一瞬间 `sh` 一定已经 `SLEEPING`"，答案是**不能静态证明**，只能用 `Ctrl-P`（`procdump()`）在运行时观测。
+
 | 字段 | init | sh | echo |
 | --- | --- | --- | --- |
 | 槽位 | `proc[0]` | `proc[1]` | `proc[2]` |
 | `pid` | 1 | 2 | 3 |
 | `name` | `"init"` | `"sh"` | `"echo"` |
-| `state` | `SLEEPING` | `SLEEPING` | `RUNNING` |
+| `state` | `SLEEPING`（典型） | `SLEEPING`（典型） | `RUNNING` |
 | `chan` | `&proc[0]`（自身 `struct proc` 地址） | `&proc[1]` | `0` |
 | `parent` | `0` | `&proc[0]` | `&proc[1]` |
 | `killed` / `xstate` | `0` / `0` | `0` / `0` | `0` / `0` |

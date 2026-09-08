@@ -128,7 +128,7 @@ wakeup(&cons.r);
 
 若 `LSR_TX_IDLE` 未置位（THR 尚未腾空），`uartwrite` 走 `sleep()` 睡在 `tx_chan` 上，由 UART 发送完成中断触发的 `uartintr()` → `wakeup(&tx_chan)` 唤醒（`uart.c:143`）。
 
-> 注意本版**没有发送环形缓冲区**，也没有 `uartstart()`：`uartwrite` 直接轮询并写 `THR`，写不进就睡。因此控制台输出是同步的——`write` 返回时字符已进入 THR。也正因为它会睡，`tx_lock` 必须是**睡眠锁**而非自旋锁。
+> 注意本版**没有发送环形缓冲区**，也没有 `uartstart()`：`uartwrite` 直接轮询并写 `THR`，写不进就睡。因此 `write()` 返回时全部字节**已写入 THR**，而非旧版那样只是入了软件队列——但这不等于已完成物理发送，最后一个字节仍在移位寄存器中。也正因为它会睡，`tx_lock` 必须是**睡眠锁**而非自旋锁。
 
 ---
 

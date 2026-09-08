@@ -2,7 +2,7 @@
 
 《操作系统实践》课程工作区。课程采用从零设计、累积构建的模式：15 周，7 轮实验，同一棵代码树持续演进，目标是一个运行在 QEMU `virt` 机器上的 RISC-V 内核。
 
-本仓库为**笔记与资料工作区**。内核代码树在领取个性化基线包后置于 `labs/` 并单独建仓（见[代码树](#代码树-labs)）。
+本仓库为**笔记与资料工作区**。内核代码树在领取个性化基线包后置于 `labs/` 并单独建仓（见[两棵代码树](#两棵代码树)）。
 
 ---
 
@@ -109,91 +109,34 @@ python3 ~/projects/oslab/materials/preflight.py
 
 ---
 
-## 参考资料
+## 两棵代码树
 
-### xv6 参考源码树 · `reference/xv6-riscv`
+课程涉及两棵性质完全不同的树，不要混为一谈。
 
-课程指定的原理阅读对象，只读不修改。已置入，HEAD `9e3161a`（2026-09-04）：
+| | 参考树 | 个性化基线包 |
+| --- | --- | --- |
+| 是什么 | 一个完整可运行的 xv6 内核 | 5 个空白文件 + 不可改动的引导与链接预置文件 + 按学号派生的 15 项参数宏 |
+| 来源 | `mit-pdos/xv6-riscv`（课程平台若指定链接则以其为准） | 第 1 周由教师发放，全学期仅此一次 |
+| 位置 | `reference/xv6-riscv`，已置入，HEAD `9e3161a`（2026-09-04） | `labs/`，尚未领取 |
+| 怎么用 | **只读**，用于理解机理；lab0 的三份图纸即针对它绘制 | 在其上从零实现自己的内核，lab1–lab7 累积演进 |
+| 注意 | 为新版上游，与旧版 book 及网络资料存在多处命名与结构差异，一律以树内实际代码为准（对照表见 [notes/lab0/](notes/lab0/#参考树与旧版资料的差异)） | 课程有公开版不具备的专属规范：定制系统调用号、用户程序内嵌加载机制、诊断输出规范、个性化参数宏。**复制公开版代码无法通过测试与问答** |
 
 ```bash
+# 参考树（已完成）
 git clone https://github.com/mit-pdos/xv6-riscv.git ~/projects/oslab/reference/xv6-riscv
-```
 
-该版本即课程说明书所述的**新版上游**，与旧版 book 及网络资料存在多处命名与结构差异（`prepare_return`、两段式 `sleep`、Sstc 时钟等），阅读时一律以树内实际代码为准。完整差异对照见 [notes/lab0/control-flow.md](notes/lab0/control-flow.md#命名与结构差异相对旧版-xv6-与网络资料)。
-
-`reference/` 由 [.gitignore](.gitignore) 排除，不纳入本仓库版本管理。
-
-### xv6 book
-
-[`materials/xv6-book-riscv-rev5.pdf`](materials/xv6-book-riscv-rev5.pdf)。注意书的修订版早于参考树，函数命名以树为准。
-
-### 已有的 MIT 6.S081 实验记录
-
-[github.com/Neyray/xv6-labs-2020](https://github.com/Neyray/xv6-labs-2020)，按 lab 分支组织：
-`util` `syscall` `pgtbl` `traps` `lazy` `cow` `thread` `net` `lock` `fs` `mmap` `riscv`
-
-**用途与边界**：该仓库是 2020 年版 xv6，与课程参考树（2026 上游）差异显著——它仍是 `usertrapret` / `initcode` / `timervec` / `uartstart`，没有 `prepare_return` / `sleep_prepare` / `stimecmp`。且 6.S081 的实验形式是在已有 xv6 上补全模块，本课程为从零构建，接口约定另有专属规范。**仅作机理理解与调试经验的参照，不作为代码来源。**
-
-主题上的大致对应：
-
-| 本课程 | 6.S081 分支 |
-| --- | --- |
-| lab2 陷入 / 系统调用 / 控制台驱动 | `syscall` `traps` |
-| lab3 SV39 页表与物理内存管理 | `pgtbl` `lazy` |
-| lab4 进程状态机与调度器 | `thread` `lock` |
-| lab5 写时复制 COW | `cow` |
-| lab6 缓冲区缓存与日志文件系统 | `fs` |
-
----
-
-## 调试速查
-
-完整手册见 [`docs/07-无gdb调试手册.md`](docs/07-无gdb调试手册.md)。本课程不使用 gdb，统一采用 QEMU 自带调试能力与内核自身的观测设施。
-
-```bash
-# 退出 QEMU：Ctrl-a 松开后按 x
-
-# 手段一 异常/中断日志 —— 黑屏时的第一动作，读第一行
-qemu-system-riscv64 -machine virt -bios none -kernel kernel/kernel -nographic \
-    -d int -D int.log &
-QPID=$!; sleep 3; kill $QPID
-grep 'async:0' int.log | head -3      # async:0 为异常，async:1 为中断（时钟噪声）
-
-# 手段二 指令执行追踪 —— 最后一个基本块的最后一条指令即 CPU 停止前的动作
-qemu-system-riscv64 -machine virt -bios none -kernel kernel/kernel -nographic \
-    -d in_asm -D trace.log &
-QPID=$!; sleep 3; kill $QPID; tail -40 trace.log
-
-# 地址回溯源码行（epc / tval 代入）
-riscv64-unknown-elf-objdump -d kernel/kernel > kernel.asm
-riscv64-unknown-elf-addr2line -e kernel/kernel 0x80000123
-
-# 手段三 QEMU Monitor：Ctrl-a c 切入 → info registers / info cpus → Ctrl-a c 切回
-```
-
-cause 速查：`1` 取指访问错（lab1 多为 PMP 未配置）｜`2` 非法指令｜`5`/`7` 读写访问错（MMIO 基址错误）｜`8` U 态 ecall（正常）｜`12`/`13`/`15` 缺页（lab3 页表映射 / lab5 COW 分支）｜`0x8000000000000005` S 态时钟中断（正常）
-
-跨轮次回归定位：`git bisect start labN-submit labM-submit`。
-
----
-
-## 代码树 · `labs/`
-
-领取个性化基线包后：
-
-```bash
+# 基线包（领取后）
 mkdir -p ~/projects/oslab/labs && cd ~/projects/oslab/labs
-# 解压基线包至此，随后建仓并完成初始提交
+# 解压至此，随后立即建仓并完成初始提交
 git init && git add -A && git commit -m "baseline: 个性化初始基线包"
 ```
 
-课程要求的四条 git 命令（[学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)）：
+`reference/` 与 `labs/` 均由 [.gitignore](.gitignore) 排除，不纳入本仓库版本管理。
 
-```bash
-git init                                    # 领到基线后立即建仓
-git tag labN-submit                         # 每轮完成打标签锁定版本
-git archive -o labN-<学号>.zip labN-submit  # 导出归档，作为评测与备查证据
-git push                                    # 推送至私有远程仓库备份
-```
+课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。
 
-异常时以 `git checkout` 或标签回滚；跨实验的隐蔽回归以 `git bisect` 二分定位（[手册 §五](docs/07-无gdb调试手册.md#五跨轮次的回归定位git-bisect)）。
+### 其他参考
+
+- [`materials/xv6-book-riscv-rev5.pdf`](materials/xv6-book-riscv-rev5.pdf) —— lab0 需精读 Ch.1《Operating system interfaces》、Ch.4《Traps and system calls》。书早于参考树，命名以树为准。
+- [xv6 book 中文翻译（rev1）](https://xv6.dgs.zone/tranlate_books/book-riscv-rev1/summary.html) —— 上述两章的中文版，用于辅助理解概念。版本比手头的 rev5 更旧，**书中代码清单与函数名不可作准**。同站的 6.S081 实验指导属另一门课程，与本课程无关。
+- [Neyray/xv6-labs-2020](https://github.com/Neyray/xv6-labs-2020) —— 本人 2020 版 6.S081 记录。属旧版形态（`usertrapret` / `initcode` / `timervec`），仅作机理与调试经验参照，不作代码来源。

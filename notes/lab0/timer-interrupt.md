@@ -54,16 +54,31 @@ w_stimecmp(r_time() + 1000000);   // trap.c:179，约 0.1 秒
 | 14 | `swtch(&p->context, &mycpu()->context)`：存 `ra`+`sp`+`s0–s11` 到 `p->context`，从 `cpu->context` 载入 | SW | K-stack(3) → sched-stack | S | `p->lock` **跨 swtch 持有** |
 | 15 | 回到 `scheduler()` 的 `swtch` 之后：`mycpu()->intena = 0`；`c->proc = 0`；`found = 1`；`release(&p->lock)` | SW | sched-stack | S | 释放 `p->lock` |
 | 16 | 继续扫描 `proc[]`；每轮循环顶部 `intr_on(); intr_off();`；若整轮无 `RUNNABLE` 则 `wfi` | SW | sched-stack | S | 逐个 `p->lock` |
-| 17 | 选中某个 `RUNNABLE` 进程 `p'`：`p'->state = RUNNING`；`c->proc = p'`；`swtch(&c->context, &p'->context)` | SW | sched-stack → K-stack(p') | S | `p'->lock` |
-| 18 | `p'` 从它自己上次的 `sched()` 中返回：`mycpu()->intena = intena`；回到 `yield()`；`release(&p->lock)` | SW | K-stack(p') | S | 释放 `p'->lock` |
-| 19 | `yield()` 返回 `usertrap()`；调 `prepare_return()` | SW | K-stack(p') | S | — |
-| 20 | `prepare_return()`：`intr_off()`；`w_stvec(TRAMPOLINE + (uservec-trampoline))`；回填 `kernel_satp`/`kernel_sp`/`kernel_trap`/`kernel_hartid` | SW | K-stack(p') | S | — |
-| 21 | `prepare_return()`：`sstatus.SPP ← 0`；`sstatus.SPIE ← 1`；`w_sepc(p->trapframe->epc)` | SW | K-stack(p') | S | — |
-| 22 | `usertrap()` `return MAKE_SATP(p->pagetable)` —— 返回值经 `a0` 传出，控制流**落入** `trampoline.S:userret` | SW | K-stack(p') | S | — |
-| 23 | `userret`：`fence.i`；`sfence.vma` → `csrw satp,a0` → `sfence.vma`；`li a0,TRAPFRAME`；`ld` 恢复 31 个寄存器；最后 `ld a0,112(a0)` | SW | → U-stack(p') | S | — |
-| 24 | `sret`：`pc ← sepc`；`sstatus.SIE ← sstatus.SPIE`（重开中断）；特权级 ← `sstatus.SPP`（= U） | HW | U-stack(p') | S→U | — |
+| 17 | `scheduler()` 选中某个 `RUNNABLE` 进程 `p'`——**未必是 echo**：`p'->state = RUNNING`；`c->proc = p'`；`swtch(&c->context, &p'->context)` | SW | sched-stack → K-stack(p') | S | `p'->lock` |
+| 18 | `p'` **从它自己上次 `swtch` 保存的位置**继续，未必是 `yield()`（见下表）；由 `p'` 侧代码 `release(&p'->lock)` | SW | K-stack(p') | S | 释放 `p'->lock` |
+| 19 | 本核可如此往复运行任意多个进程。echo 此刻是 `RUNNABLE`，静候被再次选中——多核下也可能由**另一个核**的 `scheduler()` 选中 | SW | — | S | — |
+| 20 | `scheduler()` 再次选中 echo：`p->state = RUNNING`；`c->proc = p`；`swtch(&c->context, &p->context)` | SW | sched-stack → K-stack(3) | S | `p->lock` |
+| 21 | echo 的 `sched()` **从第 14 步那条 `swtch` 处返回**：`mycpu()->intena = intena` | SW | K-stack(3) | S | `p->lock` |
+| 22 | 返回 `yield()`：`release(&p->lock)` | SW | K-stack(3) | S | 释放 `p->lock` |
+| 23 | `yield()` 返回 `usertrap()`；调 `prepare_return()` | SW | K-stack(3) | S | — |
+| 24 | `prepare_return()`：`intr_off()`；`w_stvec(TRAMPOLINE + (uservec-trampoline))`；回填 `kernel_satp`/`kernel_sp`/`kernel_trap`/`kernel_hartid` | SW | K-stack(3) | S | — |
+| 25 | `prepare_return()`：`sstatus.SPP ← 0`；`sstatus.SPIE ← 1`；`w_sepc(p->trapframe->epc)` | SW | K-stack(3) | S | — |
+| 26 | `usertrap()` `return MAKE_SATP(p->pagetable)` —— 返回值经 `a0` 传出，控制流**落入** `trampoline.S:userret` | SW | K-stack(3) | S | — |
+| 27 | `userret`：`fence.i`；`sfence.vma` → `csrw satp,a0` → `sfence.vma`；`li a0,TRAPFRAME`；`ld` 恢复 31 个寄存器；最后 `ld a0,112(a0)` | SW | → U-stack(3) | S | — |
+| 28 | `sret`：`pc ← sepc`；`sstatus.SIE ← sstatus.SPIE`（重开中断）；特权级 ← `sstatus.SPP`（= U）。echo 从被时钟中断打断的那条指令继续 | HW | U-stack(3) | S→U | — |
 
-> **注意第 22 步**：本版 `usertrap()` 的返回类型是 `uint64`，返回的是用户 satp。`uservec` 中调用它的指令是 `jalr t0`，其返回地址正是紧随其后的 `userret` 第一条指令，因此 `usertrap` 一返回就**自然落入** `userret`，`a0` 里恰好是 satp。旧版是 `usertrapret()` 在函数内部计算好 satp 后用函数指针显式跳转到 `userret`，两者到达同一个地方，但调用形态不同——画图时不能照抄旧版。
+> **第 17–20 步是本流程最容易画错的地方。** `scheduler()` 只是遍历 `proc[]` 找任意一个 `RUNNABLE` 就 `swtch` 过去（`proc.c:445–453`），它**并不知道**也不关心谁是"刚才让出 CPU 的那个"。被选中的 `p'` 恢复执行的位置，取决于 `p'` **自己**上一次是在哪里调用 `swtch` 的：
+>
+> | `p'` 上次停在哪 | `swtch` 返回后从哪继续 |
+> | --- | --- |
+> | `yield()` → `sched()` | 回 `yield()`，与本表第 21–23 步同形 |
+> | `sleep()` → `sched()`（`proc.c:570`） | 回 `sleep()`，`release(&p->lock)` 后返回给 `consoleread` / `kwait` / `uartwrite` 等调用方 |
+> | 首次被调度（`context.ra = forkret`） | 进 `forkret()`，走它自己的 `prepare_return()` + 手动跳 `userret` |
+> | `kexit()` → `sched()` | **不返回**，该进程已是 `ZOMBIE` |
+>
+> 换句话说：**上下文切换不是"调度器选谁、谁就回到 `usertrap`"，而是每个进程各自从它上一次 `swtch` 保存的 `ra`/`sp` 处继续。** 本材料追踪的是 echo 这一个进程，所以第 19 步之后必须等 `scheduler()` **再次选中 echo**，控制流才回到第 14 步那条 `swtch` 的返回点，进而回到 `yield()` → `usertrap()`。中间隔了多久、跑过哪些进程，都不确定。
+
+> **注意第 26 步**：本版 `usertrap()` 的返回类型是 `uint64`，返回的是用户 satp。`uservec` 中调用它的指令是 `jalr t0`，其返回地址正是紧随其后的 `userret` 第一条指令，因此 `usertrap` 一返回就**自然落入** `userret`，`a0` 里恰好是 satp。旧版是 `usertrapret()` 在函数内部计算好 satp 后用函数指针显式跳转到 `userret`，两者到达同一个地方，但调用形态不同——画图时不能照抄旧版。
 
 ---
 
@@ -108,7 +123,7 @@ trapframe 除 32 个通用寄存器外还有 5 个字段（`proc.h:41–45`）�
 
 > 这条差异就是调试手册 §六"系统调用陷入死循环无限重入 → 查 `sepc` 是否 +4"那一行的由来。
 
-**为什么 `prepare_return()` 一开始就 `intr_off()`？** 它随后要把 `stvec` 从 `kernelvec` 改回 `uservec`。改完到 `sret` 之间 CPU 仍在 S 态，若此时来一个中断，硬件会跳到 `uservec`——而 `uservec` 的第一件事是 `li a0, TRAPFRAME` 并往里写寄存器，此刻用的却还是内核页表，`TRAPFRAME` 在内核页表中并无映射，立刻二次异常。中断在第 24 步由 `sret` 依据 `SPIE` 自动重新打开，窗口精确闭合。
+**为什么 `prepare_return()` 一开始就 `intr_off()`？** 它随后要把 `stvec` 从 `kernelvec` 改回 `uservec`。改完到 `sret` 之间 CPU 仍在 S 态，若此时来一个中断，硬件会跳到 `uservec`——而 `uservec` 的第一件事是 `li a0, TRAPFRAME` 并往里写寄存器，此刻用的却还是内核页表，`TRAPFRAME` 在内核页表中并无映射，立刻二次异常。中断在第 28 步由 `sret` 依据 `SPIE` 自动重新打开，窗口精确闭合。
 
 **若 `stvec` 忘了改回 `uservec`**：用户态下一次陷入会跳进 `kernelvec` → `kerneltrap()`，而它的第一个断言就是 `if((sstatus & SSTATUS_SPP) == 0) panic("kerneltrap: not from supervisor mode")`——来自用户态的陷入 `SPP` 为 0，直接 panic。
 
