@@ -1,0 +1,36 @@
+# --- 参考源码树：独立仓库，只读不改，不纳入本仓库 ---
+reference/
+
+# --- 内核代码树：领到个性化基线包后单独建仓 ---
+labs/
+
+# --- QEMU / 调试产物 ---
+*.log
+int.log
+trace.log
+kernel.asm
+*.sock
+/tmp/m.sock
+
+# --- 构建产物 ---
+*.o
+*.d
+*.asm
+*.sym
+*.img
+kernel/kernel
+fs.img
+
+# --- 归档包 ---
+lab*-*.zip
+
+# --- 编辑器 / 系统 ---
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# --- Word 临时锁文件 ---
+~$*
