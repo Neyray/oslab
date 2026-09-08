@@ -10,17 +10,17 @@
 
 ```
 ~/projects/oslab/
-├── README.md            仓库总览
+├── README.md            本文件，仓库总览
 ├── CLAUDE.md            AI 辅助工具的工作约定
-├── docs/                课程文档（docx 转 md，便于检索与交叉引用）
+├── docs/                课程发放文档（docx 转 md，便于检索与交叉引用）
 │   ├── 05-学生须知.md            规则、评分、工作流、AI 政策
 │   ├── 06-环境安装指引.md        工具链安装与 preflight 自检
 │   ├── 07-无gdb调试手册.md       三项核心调试手段
 │   └── lab0-实验说明书.md        热身实验任务书
-├── notes/
-│   └── lab0/            三份交付材料与思考题
+├── notes/               各轮实验的笔记与交付材料，每轮一个目录
+│   └── lab0/            → 该目录的 README 是 lab0 的索引与进度
 ├── materials/           课程原始 docx / xv6 book / preflight.py
-└── reference/           MIT xv6-riscv 参考源码树（阅读用，只读）
+└── reference/           MIT xv6-riscv 参考源码树（阅读用，只读，不纳入版本管理）
 ```
 
 ---
@@ -67,62 +67,45 @@ python3 ~/projects/oslab/materials/preflight.py
 
 ---
 
-## lab0（热身）· 第 1 周
+## 实验进度
 
-追踪 Shell 执行 `echo hi` 命令的全生命周期。通过制，不计分，材料在 lab1 验收时抽验。
-任务书：[`docs/lab0-实验说明书.md`](docs/lab0-实验说明书.md)
+每轮实验的任务分解、笔记与交付材料在各自的 `notes/labN/` 目录，该目录的 README 为当轮索引。
 
-| 材料 | 文件 | 状态 |
+| 轮次 | 主题 | 内部观测设施（交付物，同时是调试手段） | 笔记 | 状态 |
+| --- | --- | --- | --- | --- |
+| lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 文字稿完成，待手绘 |
+| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | — | 未开始 |
+| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | — | 未开始 |
+| lab3 | SV39 页表与物理内存管理 | `dump_pagetable` | — | 未开始 |
+| lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |
+| lab5 | 写时复制 COW 与系统调用 | `pmc(0)` / `pmc(1)` 计数 | — | 未开始 |
+| lab6 | 缓冲区缓存与日志文件系统 | `crash_at(stage)` 受控断电 | — | 未开始 |
+| lab7 | 综合故障排查与现场系统设计 | 上述全部 | — | 未开始 |
+
+后期实验复用前期模块：lab5 的写时复制在 lab2 实现的陷入分发中挂载缺页分支，lab6 的文件系统替换前期的用户程序加载方式。前期遗留缺陷将在后续轮次暴露。
+
+---
+
+## 每轮实验工作流
+
+1. 先做设计笔记——思考题不判分，但验收问答从中抽选；动手前明确数据结构、不变式与回滚路径
+2. 在自有代码树上实现——不得修改包内系统预置文件，预置文件规定硬件与系统的接口边界
+3. 先于实现编写两个自测用例——覆盖边界条件、错误路径，以及仅由个性化参数决定的行为
+4. 打标签与归档——`git tag labN-submit` + `git archive`
+5. 按时参加现场验收——功能 + 回归 + 三题问答
+
+| | 官方测试 | 自写测试 |
 | --- | --- | --- |
-| 一：全系统控制流图（模块级） | [notes/lab0/control-flow.md](notes/lab0/control-flow.md) | 文字稿完成，待手绘 |
-| 二：核心数据结构全景快照 | [notes/lab0/data-structures.md](notes/lab0/data-structures.md) | 文字稿完成，待手绘 |
-| 三：一次时钟中断的微观旅程 | [notes/lab0/timer-interrupt.md](notes/lab0/timer-interrupt.md) | 文字稿完成，待手绘 |
-| 思考题作答 | [notes/lab0/thinking-questions.md](notes/lab0/thinking-questions.md) | 完成 |
+| 来源 | 随增量包发放 `support/tests/` | 本人编写，先于实现 |
+| 作用 | 检验全员一致的基础规范与正确性 | 明确规格与边界；覆盖个性化参数行为 |
+| 处理 | 计分，验收现场运行 | 不批改，归档备查，问答抽问 |
 
-三份材料的文字部分基于参考树 HEAD `9e3161a` 通读后写成，快照数值取自 `memlayout.h` / `riscv.h` / `param.h` 常量与 `user/_echo` 的实际 ELF 布局，复核方法附在 [材料二文末](notes/lab0/data-structures.md#复核方法)。手绘图纸尚未绘制。
+### 笔记目录约定
 
-说明书预计耗时 10–12 小时（控制流图 6–8 小时，快照约 4 小时）。
-
-### 阅读路线
-
-按说明书推荐顺序推进，避免按文件字母序孤立阅读：
-
-- [ ] 1. `user/sh.c` 的 `main` 循环 —— 用户视角
-- [ ] 2. `user/usys.pl` + `kernel/syscall.c` —— 系统调用跨越特权级边界
-- [ ] 3. `kernel/trampoline.S` + `kernel/trap.c` —— 特权边界（先读 C 分发逻辑，汇编只看注释与跳转）
-- [ ] 4. `kernel/exec.c` + `kernel/vm.c::uvmcopy` —— echo 进程的来源
-- [ ] 5. `kernel/file.c` + `kernel/console.c` —— 字符串到外设的路径
-- [ ] 6. xv6 book《Operating system interfaces》《Traps and system calls》精读，与草图互校
-
-每个核心函数的三个追问：调用者是谁；是否可能阻塞睡眠、由谁唤醒；错误分支如何回滚返回。
-
-### 与旧版资料的差异
-
-参考树为新版上游，与旧版 book 及网络资料存在多处差异，一律以树内实际代码为准。通读后确认的主要差异：
-
-| 旧版 | 参考树 |
-| --- | --- |
-| `usertrapret()`，由它跳转到 `userret` | `prepare_return()`；且 `usertrap()` 改为**返回 satp**，返回后直接落入 `userret` |
-| `sleep(chan, lk)` 单段 | `sleep_prepare(chan)` + `sleep()` 两段式 |
-| `fork` / `exit` / `wait` / `exec` / `kill` | `kfork` / `kexit` / `kwait` / `kexec` / `kkill` |
-| `printf()` | `printk()` |
-| `userinit()` 加载内嵌 `initcode.S` | `userinit()` 只建进程，由 `forkret()` 调 `kexec("/init", …)` 从文件系统加载 |
-| M 态 `timervec` + `mtimecmp` 转发软件中断 | **Sstc 扩展**，`clockintr()` 直接写 `stimecmp`，时钟中断不经 M 态 |
-| UART 发送用环形缓冲 + 自旋锁 + `uartstart()` | `uartwrite()` 用睡眠锁 + `sleep_prepare(&tx_chan)`，无发送缓冲 |
-| 惰性分配为习题 | `vmfault()` 已在上游，`usertrap` 处理 scause 13/15 |
-
-完整对照见 [notes/lab0/control-flow.md](notes/lab0/control-flow.md#命名与结构差异相对旧版-xv6-与网络资料)。
-
-### 验收检查清单
-
-- [ ] 控制流图覆盖 `read → fork → exec → write → exit` 全链路，调用逻辑完整自洽
-- [ ] 核心跳转标注堆栈归属与特权级转换
-- [ ] 三张快照字段完整，引用链路清晰（`file → inode`、`proc → pagetable`）
-- [ ] 页表快照标出 trampoline 与 trapframe 的虚拟地址边界及权限位
-- [ ] 时钟中断流程体现寄存器现场保护、调度器交接与 `sret` 恢复
-- [ ] 至少 3 处自主思考批注（统一以 `💭` 标记，便于统计）
-
-手绘图纸的扫描件置于各 lab 目录的 `assets/`，在 md 中以 `![](assets/xxx.png)` 引用。md 承载结构化文字、字段表与批注，手绘图为主体，两者互为索引。
+- 每轮实验一个 `notes/labN/` 目录，目录内 README 为当轮索引（任务分解、进度、验收自查）
+- 手绘图纸的扫描件置于该轮的 `assets/`，在 md 中以 `![](assets/xxx.png)` 引用
+- md 承载结构化文字、字段表与批注，手绘图为主体，两者互为索引
+- 自主思考批注统一以 `💭` 标记，便于按验收要求统计
 
 ---
 
@@ -130,26 +113,26 @@ python3 ~/projects/oslab/materials/preflight.py
 
 ### xv6 参考源码树 · `reference/xv6-riscv`
 
-lab0 的阅读对象，只读不修改。已置入，HEAD `9e3161a`（2026-09-04）：
+课程指定的原理阅读对象，只读不修改。已置入，HEAD `9e3161a`（2026-09-04）：
 
 ```bash
 git clone https://github.com/mit-pdos/xv6-riscv.git ~/projects/oslab/reference/xv6-riscv
 ```
 
-该版本即课程说明书所述的新版上游：`usertrapret` 已不存在，`prepare_return` 与 `sleep_prepare` 均在树内。课程平台若另行指定参考树链接，以课程平台为准。
+该版本即课程说明书所述的**新版上游**，与旧版 book 及网络资料存在多处命名与结构差异（`prepare_return`、两段式 `sleep`、Sstc 时钟等），阅读时一律以树内实际代码为准。完整差异对照见 [notes/lab0/control-flow.md](notes/lab0/control-flow.md#命名与结构差异相对旧版-xv6-与网络资料)。
 
 `reference/` 由 [.gitignore](.gitignore) 排除，不纳入本仓库版本管理。
 
 ### xv6 book
 
-[`materials/xv6-book-riscv-rev5.pdf`](materials/xv6-book-riscv-rev5.pdf)。lab0 对应章节：Ch.1 Operating system interfaces、Ch.4 Traps and system calls。
+[`materials/xv6-book-riscv-rev5.pdf`](materials/xv6-book-riscv-rev5.pdf)。注意书的修订版早于参考树，函数命名以树为准。
 
 ### 已有的 MIT 6.S081 实验记录
 
 [github.com/Neyray/xv6-labs-2020](https://github.com/Neyray/xv6-labs-2020)，按 lab 分支组织：
 `util` `syscall` `pgtbl` `traps` `lazy` `cow` `thread` `net` `lock` `fs` `mmap` `riscv`
 
-**用途与边界**：MIT 6.S081 的实验形式是在已有 xv6 上补全模块，本课程为从零构建，两者接口约定不同（本课程含定制系统调用号、用户程序内嵌加载机制、诊断输出规范、个性化参数宏）。该仓库仅作机理理解与调试经验的参照，不作为代码来源。
+**用途与边界**：该仓库是 2020 年版 xv6，与课程参考树（2026 上游）差异显著——它仍是 `usertrapret` / `initcode` / `timervec` / `uartstart`，没有 `prepare_return` / `sleep_prepare` / `stimecmp`。且 6.S081 的实验形式是在已有 xv6 上补全模块，本课程为从零构建，接口约定另有专属规范。**仅作机理理解与调试经验的参照，不作为代码来源。**
 
 主题上的大致对应：
 
@@ -190,6 +173,8 @@ riscv64-unknown-elf-addr2line -e kernel/kernel 0x80000123
 
 cause 速查：`1` 取指访问错（lab1 多为 PMP 未配置）｜`2` 非法指令｜`5`/`7` 读写访问错（MMIO 基址错误）｜`8` U 态 ecall（正常）｜`12`/`13`/`15` 缺页（lab3 页表映射 / lab5 COW 分支）｜`0x8000000000000005` S 态时钟中断（正常）
 
+跨轮次回归定位：`git bisect start labN-submit labM-submit`。
+
 ---
 
 ## 代码树 · `labs/`
@@ -212,36 +197,3 @@ git push                                    # 推送至私有远程仓库备份
 ```
 
 异常时以 `git checkout` 或标签回滚；跨实验的隐蔽回归以 `git bisect` 二分定位（[手册 §五](docs/07-无gdb调试手册.md#五跨轮次的回归定位git-bisect)）。
-
----
-
-## 每轮实验工作流
-
-1. 先做设计笔记——思考题不判分，但验收问答从中抽选；动手前明确数据结构、不变式与回滚路径
-2. 在自有代码树上实现——不得修改包内系统预置文件，预置文件规定硬件与系统的接口边界
-3. 先于实现编写两个自测用例——覆盖边界条件、错误路径，以及仅由个性化参数决定的行为
-4. 打标签与归档——`git tag labN-submit` + `git archive`
-5. 按时参加现场验收——功能 + 回归 + 三题问答
-
-| | 官方测试 | 自写测试 |
-| --- | --- | --- |
-| 来源 | 随增量包发放 `support/tests/` | 本人编写，先于实现 |
-| 作用 | 检验全员一致的基础规范与正确性 | 明确规格与边界；覆盖个性化参数行为 |
-| 处理 | 计分，验收现场运行 | 不批改，归档备查，问答抽问 |
-
----
-
-## 学期路线
-
-| 轮次 | 主题 | 内部观测设施（交付物，同时是调试手段） |
-| --- | --- | --- |
-| lab0 | 阅读与剖析（热身，通过制） | 三份图纸 |
-| lab1 | 裸机启动与输出 | 自实现 `printf` + banner |
-| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` |
-| lab3 | SV39 页表与物理内存管理 | `dump_pagetable` |
-| lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 |
-| lab5 | 写时复制 COW 与系统调用 | `pmc(0)` / `pmc(1)` 计数 |
-| lab6 | 缓冲区缓存与日志文件系统 | `crash_at(stage)` 受控断电 |
-| lab7 | 综合故障排查与现场系统设计 | 上述全部 |
-
-后期实验复用前期模块：lab5 的写时复制在 lab2 实现的陷入分发中挂载缺页分支，lab6 的文件系统替换前期的用户程序加载方式。前期遗留缺陷将在后续轮次暴露。
