@@ -156,8 +156,27 @@ trapframe 除 32 个通用寄存器外还有 5 个字段（`proc.h:41–45`）�
 
 ---
 
-## 手绘图
+## 时钟中断时序图
 
-<!-- ![时钟中断时序图](assets/timer-interrupt.png) -->
+```mermaid
+flowchart TD
+  A["time ≥ stimecmp<br/>硬件置 sip.STIP<br/>U / U-stack(3) / 无锁"]
+  B["硬件保存 sepc、scause、SPP、SPIE<br/>并清 SIE，pc←stvec<br/>U→S / U-stack(3) / 无锁"]
+  C["uservec 保存 31 个通用寄存器到 TRAPFRAME<br/>S / 尚未切内核栈 / 无锁"]
+  D["载入 kernel_sp、kernel_satp、usertrap<br/>切到 K-stack(3) 与内核页表<br/>S / K-stack(3) / 无锁"]
+  E["usertrap 保存 epc → devintr → clockintr<br/>S / K-stack(3) / 无锁"]
+  F["hart0: ticks++ 与 wakeup(&amp;ticks)<br/>所有 hart: 重装 stimecmp<br/>S / K-stack(3) / tickslock 后释放"]
+  G["which_dev==2 → yield<br/>state=RUNNABLE → sched<br/>S / K-stack(3) / p.lock"]
+  H["swtch: echo context → cpu context<br/>S / K-stack(3)→sched-stack / p.lock 跨切换"]
+  I["scheduler 释放 echo.p.lock<br/>扫描并运行任意 RUNNABLE 进程 p′<br/>S / sched-stack↔K-stack(p′) / p′.lock"]
+  J["再次选中 echo<br/>恢复 echo 的 ra/sp/s0–s11<br/>S / sched-stack→K-stack(3) / p.lock"]
+  K["sched 返回 → yield 释放 p.lock<br/>usertrap → prepare_return<br/>S / K-stack(3) / 无锁"]
+  L["回填 trapframe，设置 sepc、SPP=U、SPIE=1<br/>切用户页表并恢复 31 个寄存器<br/>S / K-stack(3)→U-stack(3) / 无锁"]
+  M["sret：回到被打断的用户指令<br/>S→U / U-stack(3) / 无锁"]
 
-按上表绘制时序图，标注每阶段的栈、特权级与持锁情况。
+  A --> B --> C --> D --> E --> F --> G --> H --> I
+  I -->|可能先运行其他进程| I
+  I -->|选中 echo| J --> K --> L --> M
+```
+
+> 💭 **手绘复核点**：本参考树使用 Sstc，时钟中断直接进入 S 态，没有旧版 `timervec` 的 M 态转发；中断路径不对 `epc` 加 4；调度器可能先运行任意其他进程，只有再次选中 echo 后才会从它自己的 `swtch` 返回点继续。

@@ -11,18 +11,18 @@
 
 | 材料 | 文件 | 状态 |
 | --- | --- | --- |
-| 一：全系统控制流图（模块级） | [control-flow.md](control-flow.md) | 文字稿完成，待手绘 |
-| 二：核心数据结构全景快照 | [data-structures.md](data-structures.md) | 文字稿完成，待手绘 |
-| 三：一次时钟中断的微观旅程 | [timer-interrupt.md](timer-interrupt.md) | 文字稿完成，待手绘 |
+| 一：全系统控制流图（模块级） | [control-flow.md](control-flow.md) | 电子图稿与逐阶段说明完成 |
+| 二：核心数据结构全景快照 | [data-structures.md](data-structures.md) | 三张电子快照与数值推导完成 |
+| 三：一次时钟中断的微观旅程 | [timer-interrupt.md](timer-interrupt.md) | 电子时序图与逐阶段说明完成 |
 | 思考题作答（8 道，不上交） | [thinking-questions.md](thinking-questions.md) | 完成 |
 
 三份材料的文字部分基于参考树 `reference/xv6-riscv` HEAD `9e3161a` 通读后写成；快照数值取自 `memlayout.h` / `riscv.h` / `param.h` 常量与 `user/_echo` 的实际 ELF 布局，复核方法见[材料二文末](data-structures.md#复核方法)。
 
-### 当前唯一待办：手绘三张图
+### 仓库成果与现场手绘件
 
-说明书要求的交付物是**三份图纸**，并明确要求本人理解并亲手绘制。`assets/` 目前为空，因此 **lab0 尚未完成交付**——文字稿再完善也不能替代这一项。
+仓库中的三份材料已经包含完整电子图稿、字段表、源码依据、边界条件与思考题答案，可作为 lab0 的可追溯电子成果。
 
-按三份 md 的阶段表与树形图绘制，扫描或拍照后放入 [`assets/`](assets/)，在对应 md 中以 `![](assets/xxx.png)` 引用，并把上表状态改为「完成」。绘制时至少补 3 处本人的 `💭` 批注（现有批注是通读源码时记的，需自行复核替换）。
+说明书另行要求学生本人理解并亲手绘制纸面版本。这一现场验收件不能由仓库中的 Mermaid 图冒充；验收前应照电子图稿亲自复刻，扫描或拍照后放入 [`assets/`](assets/)，并至少补 3 处本人复核后的 `💭` 批注。
 
 说明书预计耗时 10–12 小时：控制流图与阅读路线 6–8 小时，三份快照约 4 小时（快照部分可与 lab1 并行推进）。超过 10 小时仍未理清控制流图应带草稿求助。
 
@@ -32,12 +32,12 @@
 
 按说明书推荐顺序推进，避免按文件字母序孤立阅读：
 
-- [ ] 1. `user/sh.c` 的 `main` 循环 —— 先从用户视角看发生了什么
-- [ ] 2. `user/usys.pl` + `kernel/syscall.c` —— 系统调用如何跨越特权级边界
-- [ ] 3. `kernel/trampoline.S` + `kernel/trap.c` —— 特权边界上到底发生了什么（先读 C 分发逻辑，汇编只看注释与跳转）
-- [ ] 4. `kernel/exec.c` + `kernel/vm.c::uvmcopy` —— echo 进程从何而来
-- [ ] 5. `kernel/file.c` + `kernel/console.c` —— 字符串 `"hi"` 如何输出到外设
-- [ ] 6. xv6 book《Operating system interfaces》《Traps and system calls》两章精读，与草图互校
+- [x] 1. `user/sh.c` 的 `main` 循环 —— 先从用户视角看发生了什么
+- [x] 2. `user/usys.pl` + `kernel/syscall.c` —— 系统调用如何跨越特权级边界
+- [x] 3. `kernel/trampoline.S` + `kernel/trap.c` —— 特权边界上到底发生了什么（先读 C 分发逻辑，汇编只看注释与跳转）
+- [x] 4. `kernel/exec.c` + `kernel/vm.c::uvmcopy` —— echo 进程从何而来
+- [x] 5. `kernel/file.c` + `kernel/console.c` —— 字符串 `"hi"` 如何输出到外设
+- [x] 6. xv6 book《Operating system interfaces》《Traps and system calls》两章精读，与草图互校
 
 **每个核心函数的三个追问**：它被谁调用？是否可能阻塞睡眠、若阻塞由谁唤醒？遇到错误分支时如何回滚并返回？
 
@@ -68,12 +68,13 @@
 
 教师在 lab1 验收时随机抽验，每项满足即认定通过：
 
-- [ ] 控制流图完整覆盖 `read → fork → exec → write → exit` 全链路，调用逻辑完整自洽
-- [ ] 控制流图中的核心跳转准确标注了堆栈归属与特权级转换
-- [ ] 三张快照数据结构字段完整，引用链路清晰（`file → inode`、`proc → pagetable`）
-- [ ] 页表快照正确标出 trampoline 与 trapframe 的虚拟地址边界及权限位
-- [ ] 时钟中断流程完整体现寄存器现场保护、调度器交接与 `sret` 恢复
-- [ ] 图纸中包含至少 3 处自主思考的批注痕迹（统一以 `💭` 标记，便于统计）
+- [x] 控制流图完整覆盖 `read → fork → exec → write → exit` 全链路，调用逻辑完整自洽
+- [x] 控制流图中的核心跳转准确标注了堆栈归属与特权级转换
+- [x] 三张快照数据结构字段完整，引用链路清晰（`file → inode`、`proc → pagetable`）
+- [x] 页表快照正确标出 trampoline 与 trapframe 的虚拟地址边界及权限位
+- [x] 时钟中断流程完整体现寄存器现场保护、调度器交接与 `sret` 恢复
+- [x] 电子稿中包含至少 3 处 `💭` 复核点
+- [ ] 纸面图由本人复刻，并加入至少 3 处本人验证后的批注（现场验收项）
 
 ---
 

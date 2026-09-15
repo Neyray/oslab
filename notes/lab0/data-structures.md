@@ -209,10 +209,74 @@ riscv64-unknown-elf-nm user/_echo | grep -E ' T (main|start)$'
 
 ---
 
-## 手绘图
+## 核心数据结构全景图
 
-<!-- ![进程表快照](assets/proctable.png) -->
-<!-- ![页表快照](assets/pagetable.png) -->
-<!-- ![文件表快照](assets/filetable.png) -->
+### 进程表快照
 
-三张快照按上述表格与树形图绘制。
+```mermaid
+flowchart LR
+  INIT["proc[0] init<br/>pid=1 · SLEEPING(典型)<br/>parent=0 · chan=&amp;proc[0]<br/>kstack=0x3F_FFFF_D000"]
+  SH["proc[1] sh<br/>pid=2 · SLEEPING(典型)<br/>parent=&amp;proc[0] · chan=&amp;proc[1]<br/>kstack=0x3F_FFFF_B000"]
+  ECHO["proc[2] echo<br/>pid=3 · RUNNING<br/>parent=&amp;proc[1] · chan=0<br/>sz=0x4000 · epc=0x70<br/>sp=a1=0x3FC0<br/>kstack=0x3F_FFFF_9000"]
+  PT0["init pagetable"]
+  PT1["sh pagetable"]
+  PT2["echo 新 pagetable"]
+  TF2["echo trapframe<br/>exec 前后同一物理页"]
+
+  INIT -->|parent of| SH -->|parent of| ECHO
+  INIT --> PT0
+  SH --> PT1
+  ECHO --> PT2
+  ECHO --> TF2
+```
+
+`init` 与 `sh` 的 `SLEEPING` 是稳定等待状态下的典型值；严格截取极短时间窗或使用多核时，只能通过运行期观测确认，不能由静态代码强行断言。
+
+### echo 页表快照
+
+```mermaid
+flowchart TD
+  ROOT["SV39 根页表 / satp<br/>共 1 页"]
+  L1LOW["L2[0] → L1[0]"]
+  L0LOW["低地址 L0 页"]
+  TEXT["L0[0] 0x0000–0x1000<br/>text · V R X U"]
+  DATA["L0[1] 0x1000–0x2000<br/>data/bss · V R W U"]
+  GUARD["L0[2] 0x2000–0x3000<br/>guard · V R W · 无 U"]
+  STACK["L0[3] 0x3000–0x4000<br/>user stack · V R W U"]
+  L1HIGH["L2[255] → L1[511]"]
+  L0HIGH["高地址 L0 页"]
+  TF["L0[510] 0x3F_FFFF_E000<br/>TRAPFRAME · V R W · 无 U"]
+  TRAMP["L0[511] 0x3F_FFFF_F000<br/>TRAMPOLINE · V R X · 无 U"]
+
+  ROOT --> L1LOW --> L0LOW
+  L0LOW --> TEXT
+  L0LOW --> DATA
+  L0LOW --> GUARD
+  L0LOW --> STACK
+  ROOT --> L1HIGH --> L0HIGH
+  L0HIGH --> TF
+  L0HIGH --> TRAMP
+```
+
+整棵页表占 5 个页表页，包含 6 个叶 PTE。`0x4000` 到 `TRAPFRAME` 之间未映射；guard page 仍为 `PTE_V=1`，只清除了 `PTE_U`。
+
+### 文件表与 stdout 引用链快照
+
+```mermaid
+flowchart LR
+  I0["init ofile[0..2]"]
+  S0["sh ofile[0..2]"]
+  E0["echo ofile[0..2]"]
+  FILE["同一个 struct file<br/>type=FD_DEVICE<br/>ref=9 · R/W<br/>major=CONSOLE(1)"]
+  INODE["struct inode<br/>type=T_DEVICE<br/>major=1 · minor=0"]
+  DEVSW["devsw[1]<br/>read=consoleread<br/>write=consolewrite"]
+  UART["uartwrite → UART0.THR<br/>0x10000000"]
+
+  I0 -->|3 个引用| FILE
+  S0 -->|3 个引用| FILE
+  E0 -->|3 个引用| FILE
+  FILE -->|ip| INODE
+  FILE -->|major 索引| DEVSW --> UART
+```
+
+> 💭 **手绘复核点**：页表图要明确 `TRAMPOLINE` 与 `TRAPFRAME` 都无 `PTE_U`；文件图要画成 9 条 fd 引用汇聚到同一个 `struct file`，不能误画成 9 个文件对象；进程状态需标注“典型快照”，避免把调度时序当作静态事实。

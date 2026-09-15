@@ -190,9 +190,40 @@ fork1() → fork()
 
 ---
 
-## 手绘图
+## 全系统控制流图
 
-<!-- 扫描件放入 assets/ 后在此引用 -->
-<!-- ![控制流图](assets/control-flow.png) -->
+下面的电子图稿把完整链路压缩成可逐段口述的骨架。每个节点末尾依次标注“特权级 / 当前栈 / 持锁”；现场手绘时按此图展开，并结合上面的阶段表补充源码行号。
 
-按上表绘制，每个阶段标注栈 / 特权级 / 持锁三要素。
+```mermaid
+flowchart TD
+  A["sh: gets → read(0)<br/>U / U-stack(2) / 无锁"]
+  B["ecall → uservec 保存 31 个寄存器<br/>U→S / TRAPFRAME / 无锁"]
+  C["usertrap → syscall → sys_read<br/>S / K-stack(2) / 无锁"]
+  D["consoleread: 缓冲为空<br/>S / K-stack(2) / cons.lock"]
+  E["sleep_prepare → sleep → sched → swtch<br/>S / K-stack(2)→sched-stack / p.lock 跨切换"]
+  F["UART RX → PLIC → uartintr → consoleintr<br/>S / 当前 K-stack / cons.lock"]
+  G["换行到达: wakeup(&amp;cons.r)<br/>S / 当前 K-stack / 各 p.lock"]
+  H["scheduler 选中 sh → read 返回<br/>S→U / sched-stack→U-stack(2) / p.lock 后释放"]
+  I["sh: fork()<br/>U / U-stack(2) / 无锁"]
+  J["kfork: allocproc + uvmcopy + filedup<br/>S / K-stack(2) / np.lock、wait_lock"]
+  K["父 sh: wait → kwait → sleep<br/>S / K-stack(2) / p.lock 跨切换"]
+  L["子 echo: a0=0 → exec(\"echo\")<br/>U→S / U-stack(3)→K-stack(3) / 无锁"]
+  M["kexec: 新页表装载 ELF、栈和 argv<br/>S / K-stack(3) / inode 睡眠锁"]
+  N["提交新镜像 → sret → echo main<br/>S→U / K-stack(3)→U-stack(3) / 无锁"]
+  O["write(1,\"hi\\n\") → consolewrite → uartwrite<br/>U→S / K-stack(3) / tx_lock 睡眠锁"]
+  P["LSR.THRE=1 → 写 UART0.THR<br/>S / K-stack(3) / tx_lock"]
+  Q["exit → kexit: fileclose×3 → ZOMBIE<br/>S / K-stack(3)→sched-stack / wait_lock、p.lock"]
+  R["wakeup(parent) → sh 的 kwait 回收 echo<br/>S / K-stack(2) / wait_lock、pp.lock"]
+  S["sh 回到 getcmd 主循环<br/>U / U-stack(2) / 无锁"]
+
+  A --> B --> C --> D --> E
+  E -. CPU 等待输入 .-> F
+  F --> G --> H --> I --> J
+  J -->|父进程 a0=pid| K
+  J -->|子进程 a0=0| L
+  L --> M --> N --> O --> P --> Q
+  Q -->|唤醒父进程| R --> S
+  K -. 等待子进程退出 .-> R
+```
+
+> 💭 **手绘复核点**：图中 `p->lock` 跨 `swtch` 由对端释放；`kexec` 的提交点在新镜像完全构造成功之后；UART 写路径持有的是会睡眠的 `tx_lock`，不是自旋锁。现场图上应把这三处用不同颜色或编号圈出。
