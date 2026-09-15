@@ -7,6 +7,7 @@
 - 个性化参数：[`../../labs/2024302141121-kernel/我的参数.txt`](../../labs/2024302141121-kernel/我的参数.txt)
 - 设计决策：[`design.md`](design.md)
 - 测试计划：[`test-plan.md`](test-plan.md)
+- 实测结果：[`verification.md`](verification.md)
 
 ## 个性化参数
 
@@ -20,11 +21,11 @@
 
 ## 完成标准
 
-- [ ] `_entry` 从 M 态关闭中断，仅 hart 0 继续，其余 hart 停驻
-- [ ] `sp` 指向 12 KiB 启动栈顶，`mtvec` 指向 4 字节对齐的兜底向量
-- [ ] `start()` 完成 M→S 所需的 `mstatus`、`mepc`、delegation、PMP 与 Bare `satp` 配置
-- [ ] UART 按 LSR bit 5 轮询后写 THR，并按 17 字节周期节流
-- [ ] `printf` 覆盖十进制、负数、最大整数、空字符串、小写十六进制与长字符串
-- [ ] QEMU 输出与 `expect_banner.txt` 逐字节一致
-- [ ] `-d int` 日志没有同步异常（`async:0`）
-- [ ] 连续两次冷启动输出完全一致
+- [x] `_entry` 从 M 态关闭中断，仅 hart 0 继续，其余 hart 停驻
+- [x] `sp` 指向 12 KiB 启动栈顶，`mtvec` 指向 4 字节对齐的兜底向量
+- [x] `start()` 完成 M→S 所需的 `mstatus`、`mepc`、delegation、PMP 与 Bare `satp` 配置
+- [x] UART 按 LSR bit 5 轮询后写 THR，并按 17 字节周期节流
+- [x] `printf` 覆盖十进制、负数、最大整数、空字符串、小写十六进制与长字符串
+- [x] QEMU 输出与 `expect_banner.txt` 逐字节一致
+- [x] `-d int` 日志没有同步异常（`async:0`）
+- [x] 连续两次冷启动输出完全一致

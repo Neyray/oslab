@@ -1,14 +1,43 @@
-/*
- * lab1 初始骨架代码(自动生成): 系统启动与串口控制台输出。
- * 启动至此的前期初始化流程，需要由你在本实验中设计并实现。
- * 你需要实现: entry.S(start 前的 M 态准备可另置 start.c)、串口轮询输出、
- * 最小 printf。链接脚本 kernel.ld 带注释保留; 底层宏 riscv.h 完整保留。
- * 代码导读路线与设计引导问题详见《实验说明书(lab1)》。
- *
- * 两个环境注意事项(说明书 §2"环境前置条件"与附录 C, 动手前必读):
- *  1. start() 的 M→S 切换清单必须包含 PMP 配置(最简两行):
- *       w_pmpaddr0(0x3fffffffffffffull); w_pmpcfg0(0xf);
- *     否则在新版 QEMU 上 mret 进 S 态的第一条取指即触发 fault(全程无输出)。
- *  2. entry.S 里的陷阱向量标号前加 .balign 4(mtvec 要求 4 字节对齐,
- *     不满足时写入会被硬件静默丢弃)。
- */
+#include "types.h"
+#include "course_sid.h"
+
+extern void console_init(void);
+extern void console_checksum_reset(void);
+extern uint64 console_checksum_value(void);
+extern void console_checksum_pause(void);
+extern int printf(const char *format, ...);
+
+#define INT_MIN_VALUE (-2147483647 - 1)
+#define INT_MAX_VALUE 2147483647
+
+static const char long_test_text[] =
+  "0123456789012345678901234567890123456789"
+  "0123456789012345678901234567890123456789";
+
+void __attribute__((noreturn))
+main(void)
+{
+  uint64 sum;
+
+  console_init();
+  console_checksum_reset();
+
+  printf("OSLAB1 sid=%lu mod97=0x%x\n", (uint64)COURSE_SID,
+         (uint)(COURSE_SID % 97UL));
+  printf("selftest zero=%d neg=%d max=%d empty='%s' hex=0x%x long=%s\n",
+         0, INT_MIN_VALUE, INT_MAX_VALUE, "", 0xffffffffU,
+         long_test_text);
+
+#if LAB1_BANNER_PROTOCOL == 2
+  sum = console_checksum_value();
+  console_checksum_pause();
+  printf("[chk=%lu]\n", sum);
+#else
+  sum = 0;
+  (void)sum;
+  console_checksum_pause();
+#endif
+
+  for (;;)
+    asm volatile("wfi");
+}

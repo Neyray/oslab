@@ -1,14 +1,125 @@
-/*
- * lab1 初始骨架代码(自动生成): 系统启动与串口控制台输出。
- * 启动至此的前期初始化流程，需要由你在本实验中设计并实现。
- * 你需要实现: entry.S(start 前的 M 态准备可另置 start.c)、串口轮询输出、
- * 最小 printf。链接脚本 kernel.ld 带注释保留; 底层宏 riscv.h 完整保留。
- * 代码导读路线与设计引导问题详见《实验说明书(lab1)》。
- *
- * 两个环境注意事项(说明书 §2"环境前置条件"与附录 C, 动手前必读):
- *  1. start() 的 M→S 切换清单必须包含 PMP 配置(最简两行):
- *       w_pmpaddr0(0x3fffffffffffffull); w_pmpcfg0(0xf);
- *     否则在新版 QEMU 上 mret 进 S 态的第一条取指即触发 fault(全程无输出)。
- *  2. entry.S 里的陷阱向量标号前加 .balign 4(mtvec 要求 4 字节对齐,
- *     不满足时写入会被硬件静默丢弃)。
- */
+#include <stdarg.h>
+
+#include "types.h"
+
+extern void console_putc(int c);
+
+static int
+emit_char(int c)
+{
+  console_putc(c);
+  return 1;
+}
+
+static int
+print_unsigned(uint64 value, uint base)
+{
+  static const char digits[] = "0123456789abcdef";
+  char buffer[32];
+  int count = 0;
+  int used = 0;
+
+  do {
+    buffer[used++] = digits[value % base];
+    value /= base;
+  } while (value != 0);
+
+  while (used > 0)
+    count += emit_char(buffer[--used]);
+  return count;
+}
+
+static int
+print_signed(long value)
+{
+  uint64 magnitude;
+  int count = 0;
+
+  if (value < 0) {
+    count += emit_char('-');
+    /* Unsigned subtraction also handles LONG_MIN without signed overflow. */
+    magnitude = 0UL - (uint64)value;
+  } else {
+    magnitude = (uint64)value;
+  }
+
+  return count + print_unsigned(magnitude, 10);
+}
+
+int
+printf(const char *format, ...)
+{
+  va_list arguments;
+  int count = 0;
+
+  if (format == 0)
+    return 0;
+
+  va_start(arguments, format);
+  while (*format != '\0') {
+    int long_value = 0;
+    char specifier;
+
+    if (*format != '%') {
+      count += emit_char(*format++);
+      continue;
+    }
+
+    format++;
+    if (*format == 'l') {
+      long_value = 1;
+      format++;
+    }
+
+    specifier = *format;
+    if (specifier == '\0') {
+      count += emit_char('%');
+      break;
+    }
+    format++;
+
+    switch (specifier) {
+    case 'd':
+      count += long_value ? print_signed(va_arg(arguments, long))
+                          : print_signed((long)va_arg(arguments, int));
+      break;
+    case 'u':
+      count += long_value
+                 ? print_unsigned((uint64)va_arg(arguments, unsigned long), 10)
+                 : print_unsigned((uint64)va_arg(arguments, unsigned int), 10);
+      break;
+    case 'x':
+      count += long_value
+                 ? print_unsigned((uint64)va_arg(arguments, unsigned long), 16)
+                 : print_unsigned((uint64)va_arg(arguments, unsigned int), 16);
+      break;
+    case 'p':
+      count += emit_char('0');
+      count += emit_char('x');
+      count += print_unsigned((uint64)va_arg(arguments, void *), 16);
+      break;
+    case 's': {
+      const char *text = va_arg(arguments, const char *);
+      if (text == 0)
+        text = "(null)";
+      while (*text != '\0')
+        count += emit_char(*text++);
+      break;
+    }
+    case 'c':
+      count += emit_char(va_arg(arguments, int));
+      break;
+    case '%':
+      count += emit_char('%');
+      break;
+    default:
+      count += emit_char('%');
+      if (long_value)
+        count += emit_char('l');
+      count += emit_char(specifier);
+      break;
+    }
+  }
+  va_end(arguments);
+  return count;
+}

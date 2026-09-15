@@ -76,7 +76,7 @@ python3 ~/projects/oslab/materials/preflight.py
 | 轮次 | 主题 | 内部观测设施（交付物，同时是调试手段） | 笔记 | 状态 |
 | --- | --- | --- | --- | --- |
 | lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 仓库电子成果完成；现场手绘件需本人复刻 |
-| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | `labs/2024302141121-kernel/` | 个性化基线已导入，尚未实现 |
+| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | [notes/lab1/](notes/lab1/) | 实现与自动化自检完成，待现场验收 |
 | lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | — | 未开始 |
 | lab3 | SV39 页表与物理内存管理 | `dump_pagetable` | — | 未开始 |
 | lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |

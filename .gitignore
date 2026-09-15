@@ -18,7 +18,7 @@ kernel.asm
 *.asm
 *.sym
 *.img
-kernel/kernel
+**/kernel/kernel
 fs.img
 
 # --- 归档包 ---

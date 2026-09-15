@@ -1,14 +1,101 @@
-/*
- * lab1 初始骨架代码(自动生成): 系统启动与串口控制台输出。
- * 启动至此的前期初始化流程，需要由你在本实验中设计并实现。
- * 你需要实现: entry.S(start 前的 M 态准备可另置 start.c)、串口轮询输出、
- * 最小 printf。链接脚本 kernel.ld 带注释保留; 底层宏 riscv.h 完整保留。
- * 代码导读路线与设计引导问题详见《实验说明书(lab1)》。
- *
- * 两个环境注意事项(说明书 §2"环境前置条件"与附录 C, 动手前必读):
- *  1. start() 的 M→S 切换清单必须包含 PMP 配置(最简两行):
- *       w_pmpaddr0(0x3fffffffffffffull); w_pmpcfg0(0xf);
- *     否则在新版 QEMU 上 mret 进 S 态的第一条取指即触发 fault(全程无输出)。
- *  2. entry.S 里的陷阱向量标号前加 .balign 4(mtvec 要求 4 字节对齐,
- *     不满足时写入会被硬件静默丢弃)。
- */
+#include "types.h"
+#include "memlayout.h"
+#include "riscv.h"
+#include "course_sid.h"
+
+#define UART_THR 0
+#define UART_IER 1
+#define UART_LSR 5
+#define UART_LSR_THRE (1U << 5)
+
+#define THROTTLE_PERIOD (16UL + (COURSE_SID % 16UL))
+#define THROTTLE_NOP_COUNT (32UL + (COURSE_SID % 32UL))
+
+#if LAB1_BANNER_PROTOCOL < 0 || LAB1_BANNER_PROTOCOL > 2
+#error "LAB1_BANNER_PROTOCOL must be 0, 1, or 2"
+#endif
+
+static uint64 physical_bytes;
+static uint64 checksum;
+static int checksum_enabled;
+
+static volatile uint8 *
+uart_reg(uint64 offset)
+{
+  return (volatile uint8 *)(UART0 + offset);
+}
+
+static void
+throttle_after_byte(void)
+{
+  uint64 i;
+
+  physical_bytes++;
+  if (physical_bytes != THROTTLE_PERIOD)
+    return;
+
+  for (i = 0; i < THROTTLE_NOP_COUNT; i++)
+    asm volatile("nop");
+  physical_bytes = 0;
+}
+
+/* Poll 16550 LSR.THRE, then place exactly one physical byte in THR. */
+static void
+uartputc_sync(uint8 byte)
+{
+  for (;;) {
+    io_fence();
+    if ((*uart_reg(UART_LSR) & UART_LSR_THRE) != 0)
+      break;
+  }
+
+  *uart_reg(UART_THR) = byte;
+  io_fence();
+  throttle_after_byte();
+}
+
+void
+console_init(void)
+{
+  physical_bytes = 0;
+  checksum = 0;
+  checksum_enabled = 0;
+
+  /* lab1 is polling-only; keep the 16550 interrupt sources disabled. */
+  *uart_reg(UART_IER) = 0;
+  io_fence();
+}
+
+/* Emit one logical byte under the per-student line protocol. */
+void
+console_putc(int c)
+{
+  uint8 byte = (uint8)c;
+
+  if (checksum_enabled)
+    checksum += byte;
+
+  uartputc_sync(byte);
+#if LAB1_BANNER_PROTOCOL == 1
+  uartputc_sync('.');
+#endif
+}
+
+void
+console_checksum_reset(void)
+{
+  checksum = 0;
+  checksum_enabled = 1;
+}
+
+uint64
+console_checksum_value(void)
+{
+  return checksum;
+}
+
+void
+console_checksum_pause(void)
+{
+  checksum_enabled = 0;
+}
