@@ -2,7 +2,7 @@
 
 《操作系统实践》课程工作区。课程采用从零设计、累积构建的模式：15 周，7 轮实验，同一棵代码树持续演进，目标是一个运行在 QEMU `virt` 机器上的 RISC-V 内核。
 
-本仓库为**笔记与资料工作区**。内核代码树在领取个性化基线包后置于 `labs/` 并单独建仓（见[两棵代码树](#两棵代码树)）。
+本仓库是课程的**统一主仓库**：资料、笔记和个性化内核代码都在同一份 Git 历史中维护。MIT xv6 参考树仍保持只读并由 `.gitignore` 排除；个人内核位于 `labs/2024302141121-kernel/`（见[两棵代码树](#两棵代码树)）。
 
 ---
 
@@ -20,6 +20,8 @@
 ├── notes/               各轮实验的笔记与交付材料，每轮一个目录
 │   └── lab0/            → 该目录的 README 是 lab0 的索引与进度
 ├── materials/           课程原始 docx / xv6 book / preflight.py
+├── labs/
+│   └── 2024302141121-kernel/  学号 2024302141121 的个性化内核（lab1–lab7 累积演进）
 └── reference/           MIT xv6-riscv 参考源码树（阅读用，只读，不纳入版本管理）
 ```
 
@@ -73,8 +75,8 @@ python3 ~/projects/oslab/materials/preflight.py
 
 | 轮次 | 主题 | 内部观测设施（交付物，同时是调试手段） | 笔记 | 状态 |
 | --- | --- | --- | --- | --- |
-| lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 文字稿完成，待手绘 |
-| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | — | 未开始 |
+| lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 仓库电子成果完成；现场手绘件需本人复刻 |
+| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | `labs/2024302141121-kernel/` | 个性化基线已导入，尚未实现 |
 | lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | — | 未开始 |
 | lab3 | SV39 页表与物理内存管理 | `dump_pagetable` | — | 未开始 |
 | lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |
@@ -117,7 +119,7 @@ python3 ~/projects/oslab/materials/preflight.py
 | --- | --- | --- |
 | 是什么 | 一个完整可运行的 xv6 内核 | 5 个空白文件 + 不可改动的引导与链接预置文件 + 按学号派生的 15 项参数宏 |
 | 来源 | `mit-pdos/xv6-riscv`（课程平台若指定链接则以其为准） | 第 1 周由教师发放，全学期仅此一次 |
-| 位置 | `reference/xv6-riscv`，已置入，HEAD `9e3161a`（2026-09-04） | `labs/`，尚未领取 |
+| 位置 | `reference/xv6-riscv`，已置入，HEAD `9e3161a`（2026-09-04） | `labs/2024302141121-kernel/`，已导入 |
 | 怎么用 | **只读**，用于理解机理；lab0 的三份图纸即针对它绘制 | 在其上从零实现自己的内核，lab1–lab7 累积演进 |
 | 注意 | 为新版上游，与旧版 book 及网络资料存在多处命名与结构差异，一律以树内实际代码为准（对照表见 [notes/lab0/](notes/lab0/#参考树与旧版资料的差异)） | 课程有公开版不具备的专属规范：定制系统调用号、用户程序内嵌加载机制、诊断输出规范、个性化参数宏。**复制公开版代码无法通过测试与问答** |
 
@@ -125,15 +127,16 @@ python3 ~/projects/oslab/materials/preflight.py
 # 参考树（已完成）
 git clone https://github.com/mit-pdos/xv6-riscv.git ~/projects/oslab/reference/xv6-riscv
 
-# 基线包（领取后）
-mkdir -p ~/projects/oslab/labs && cd ~/projects/oslab/labs
-# 解压至此，随后立即建仓并完成初始提交
-git init && git add -A && git commit -m "baseline: 个性化初始基线包"
+# 个性化内核（已导入主仓库；不要在此目录再次 git init）
+cd ~/projects/oslab/labs/2024302141121-kernel
+make
 ```
 
-`reference/` 与 `labs/` 均由 [.gitignore](.gitignore) 排除，不纳入本仓库版本管理。
+只有 `reference/` 由 [.gitignore](.gitignore) 排除；`labs/2024302141121-kernel/` 属于本仓库正常版本控制范围。实验代码、设计笔记和材料因此可以在同一条历史中相互对应。
 
-课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。
+当前导入的是教师发放的 lab1 原始骨架：`entry.S`、`start.c`、`console.c`、`printf.c`、`main.c` 仍只有说明性注释，尚未开始实验一实现。预置文件 `kernel.ld`、`riscv.h`、`types.h`、`memlayout.h` 和 `course_sid.h` 不得修改。
+
+课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。本主仓库已经完成 `git init`，后续不要在 `labs/` 内重复初始化；提交、标签和归档由学生本人操作。
 
 ### 其他参考
 
