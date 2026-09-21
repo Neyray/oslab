@@ -1,66 +1,150 @@
-# lab1 测试计划
+# lab1 指令验收清单
 
-测试顺序遵循“先静态形状、再构建、再运行、最后异常日志”的原则，避免把格式错误和启动错误混在一起。
+本文件只保留实验说明书要求的可执行验收。除构建前置步骤外，顺序与现场 Autograder 一致：Banner 逐字节比对、<code>-d int</code> 零同步异常、节流参数源码核查；最后补做任务书要求的 printf 边界与冷启动幂等性。
 
-## 1 静态检查
+## 0 构建前置
 
-- 五个实现文件不再只有骨架注释，且预置文件保持与基线提交 `032f2ac` 一致。
-- `entry.S` 中 `_entry` 与机器态陷阱向量存在，向量地址满足 4 字节对齐。
-- 启动栈空间表达式引用 `LAB1_STACK_KB`。
-- 节流周期表达式引用 `COURSE_SID`，并存在真实 `nop` 指令。
-- `start.c` 包含 PMP 两项配置和 `satp=0`。
-
-## 2 构建与 ELF 检查
-
-```bash
+~~~bash
 cd ~/projects/oslab/labs/2024302141121-kernel
-make clean && make
-riscv64-unknown-elf-readelf -h kernel/kernel
-riscv64-unknown-elf-nm -n kernel/kernel | grep -E '_entry|machine_trap_vector|boot_stack|main'
-riscv64-unknown-elf-objdump -d kernel/kernel > /tmp/lab1-kernel.asm
-```
+make clean
+make
+~~~
 
-通过条件：无编译警告；ELF 为 RISC-V 64 位；入口是 `_entry = 0x80000000`；陷阱向量地址低两位为 0；`boot_stack_top - boot_stack = 12288`。
+预期正确结果：
 
-## 3 printf 边界
+- 两条命令退出状态均为 0。
+- 编译和链接无 warning、无 error。
+- 不再出现找不到 <code>_entry</code> 或使用默认入口的链接警告。
 
-内核启动时直接输出一行自检，覆盖：
+## 1 Banner 逐字节一致性
 
-- `0`
-- `-2147483648`（`INT_MIN`）
-- `2147483647`（`INT_MAX`）
-- 空字符串
-- `0xffffffff`
-- 连续 80 个字符的长字符串
+先执行任务书提供的形状校验器：
 
-这些字节计入协议 2 校验和，校验和行本身不计入。
+~~~bash
+python3 check_expect.py 2024302141121
+~~~
 
-## 4 输出一致性
+预期正确结果：输出包含
+<code>[ok] 形状校验通过(sid=2024302141121, 协议2)</code>，且不出现
+<code>[FAIL]</code>。这表示脚本内部三项均通过：包含学号十进制、包含
+<code>0x23</code> 且格式正确、协议 2 的最末段包含 ASCII 数字校验和且其后无正文。
 
-```bash
-timeout 3s make qemu > actual_banner.txt 2>&1 || test $? -eq 124
-cmp -s actual_banner.txt expect_banner.txt
-python3 check_expect.py 2024302141121 expect_banner.txt
-```
+再捕获内核实际串口输出并比较：
 
-若 `make qemu` 把命令本身写入重定向结果，则直接启动 QEMU，只捕获串口标准输出：
+~~~bash
+timeout 3s qemu-system-riscv64 \
+  -machine virt \
+  -bios none \
+  -kernel kernel/kernel \
+  -nographic \
+  > /tmp/lab1-actual.txt 2>/dev/null || true
 
-```bash
-timeout 3s qemu-system-riscv64 -machine virt -bios none \
-  -kernel kernel/kernel -nographic > actual_banner.txt 2>/dev/null || test $? -eq 124
-```
+cat /tmp/lab1-actual.txt
+cmp -s /tmp/lab1-actual.txt expect_banner.txt
+echo $?
+~~~
 
-## 5 异常与重启幂等性
+预期串口正文必须与 <code>expect_banner.txt</code> 逐字节一致：
 
-```bash
-timeout 3s qemu-system-riscv64 -machine virt -bios none \
-  -kernel kernel/kernel -nographic -d int -D int.log \
-  > run1.txt 2>/dev/null || test $? -eq 124
-grep 'async:0' int.log
+~~~text
+OSLAB1 sid=2024302141121 mod97=0x23
+selftest zero=0 neg=-2147483648 max=2147483647 empty='' hex=0xffffffff long=01234567890123456789012345678901234567890123456789012345678901234567890123456789
+[chk=12536]
+~~~
 
-timeout 3s qemu-system-riscv64 -machine virt -bios none \
-  -kernel kernel/kernel -nographic > run2.txt 2>/dev/null || test $? -eq 124
-cmp -s run1.txt run2.txt
-```
+<code>cmp</code> 的预期结果：
 
-通过条件：`async:0` 过滤结果为空，且两次冷启动输出逐字节一致。
+~~~text
+0
+~~~
+
+QEMU 输出后停在 <code>wfi</code> 循环，由 <code>timeout</code> 结束属于预期行为；验收标准是捕获内容与期望文件完全一致。
+
+## 2 -d int 零同步异常
+
+~~~bash
+timeout 3s qemu-system-riscv64 \
+  -machine virt \
+  -bios none \
+  -kernel kernel/kernel \
+  -nographic \
+  -d int \
+  -D /tmp/lab1-int.log \
+  > /dev/null 2>&1 || true
+
+grep -c 'async:0' /tmp/lab1-int.log || true
+~~~
+
+预期正确结果：
+
+~~~text
+0
+~~~
+
+<code>async:0</code> 表示同步异常；结果为 0 才满足任务书中 <code>-d int</code> 零异常检查的通过条件。
+
+## 3 节流参数源码核查
+
+~~~bash
+grep -n '#define THROTTLE_PERIOD' kernel/console.c
+grep -n 'physical_bytes' kernel/console.c
+grep -n 'asm volatile("nop")' kernel/console.c
+~~~
+
+预期正确结果必须同时证明：
+
+~~~text
+#define THROTTLE_PERIOD (16UL + (COURSE_SID % 16UL))
+physical_bytes 每发射一个物理字节加一，达到 THROTTLE_PERIOD 后清零
+asm volatile("nop")
+~~~
+
+源码必须直接引用 <code>COURSE_SID</code>，不能把本学号算出的 17 硬编码为节流周期，并且循环体中必须存在真实 <code>nop</code> 指令。
+
+## 4 printf 边界
+
+~~~bash
+grep -F \
+  "selftest zero=0 neg=-2147483648 max=2147483647 empty='' hex=0xffffffff long=01234567890123456789012345678901234567890123456789012345678901234567890123456789" \
+  /tmp/lab1-actual.txt
+~~~
+
+预期正确结果是原样输出同一整行，覆盖任务书要求的：
+
+~~~text
+数字 0
+负数 -2147483648
+最大整数 2147483647
+空字符串 ''
+小写十六进制 0xffffffff
+连续 80 个字符的长字符串
+~~~
+
+## 5 冷启动幂等性
+
+~~~bash
+timeout 3s qemu-system-riscv64 \
+  -machine virt \
+  -bios none \
+  -kernel kernel/kernel \
+  -nographic \
+  > /tmp/lab1-run1.txt 2>/dev/null || true
+
+timeout 3s qemu-system-riscv64 \
+  -machine virt \
+  -bios none \
+  -kernel kernel/kernel \
+  -nographic \
+  > /tmp/lab1-run2.txt 2>/dev/null || true
+
+cmp -s /tmp/lab1-run1.txt /tmp/lab1-run2.txt
+echo $?
+~~~
+
+预期正确结果：
+
+~~~text
+0
+~~~
+
+两次 QEMU 复位冷启动的串口输出必须逐字节一致。

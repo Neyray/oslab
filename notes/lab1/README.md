@@ -5,9 +5,8 @@
 ## 项目索引
 
 - 个性化参数：[`../../labs/2024302141121-kernel/我的参数.txt`](../../labs/2024302141121-kernel/我的参数.txt)
-- 设计决策：[`design.md`](design.md)
-- 测试计划：[`test-plan.md`](test-plan.md)
-- 实测结果：[`verification.md`](verification.md)
+- 设计与验收问答：[`design.md`](design.md)
+- 指令验收清单：[`test-plan.md`](test-plan.md)
 
 ## 个性化参数
 

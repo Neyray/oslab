@@ -1,9 +1,16 @@
 #include "types.h"
 #include "riscv.h"
+#include "course_sid.h"
 
 #define MSTATUS_MIE (1L << 3)
 
 extern void main(void);
+
+/*
+ * Lab1 runs C code only on hart 0, so one boot stack is sufficient. Keep its
+ * capacity tied directly to the per-student configuration used by entry.S.
+ */
+uint8 boot_stack[LAB1_STACK_KB * 1024] __attribute__((aligned(16)));
 
 /*
  * Finish the machine-mode obligations and enter supervisor mode. Interrupts

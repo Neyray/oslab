@@ -21,8 +21,13 @@ _entry:
         csrr a0, mhartid
         bnez a0, .Lpark
 
-        /* RISC-V stacks grow downward; start at the first byte past it. */
-        la sp, boot_stack_top
+        /*
+         * The aligned stack storage lives in start.c. RISC-V stacks grow
+         * downward, so add its configured byte size to obtain the initial sp.
+         */
+        la sp, boot_stack
+        li t0, LAB1_STACK_KB * 1024
+        add sp, sp, t0
         call start
 
 /* start() never returns. Park safely if that contract is ever broken. */
@@ -37,11 +42,3 @@ machine_trap_vector:
 .Ltrap_park:
         wfi
         j .Ltrap_park
-
-        .section .bss.stack,"aw",@nobits
-        .balign 16
-        .globl boot_stack
-        .globl boot_stack_top
-boot_stack:
-        .space LAB1_STACK_KB * 1024
-boot_stack_top:

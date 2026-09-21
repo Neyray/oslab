@@ -89,6 +89,8 @@ printf(const char *format, ...)
                  : print_unsigned((uint64)va_arg(arguments, unsigned int), 10);
       break;
     case 'x':
+      count += emit_char('0');
+      count += emit_char('x');
       count += long_value
                  ? print_unsigned((uint64)va_arg(arguments, unsigned long), 16)
                  : print_unsigned((uint64)va_arg(arguments, unsigned int), 16);

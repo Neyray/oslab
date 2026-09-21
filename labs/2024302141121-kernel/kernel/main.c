@@ -22,9 +22,9 @@ main(void)
   console_init();
   console_checksum_reset();
 
-  printf("OSLAB1 sid=%lu mod97=0x%x\n", (uint64)COURSE_SID,
+  printf("OSLAB1 sid=%lu mod97=%x\n", (uint64)COURSE_SID,
          (uint)(COURSE_SID % 97UL));
-  printf("selftest zero=%d neg=%d max=%d empty='%s' hex=0x%x long=%s\n",
+  printf("selftest zero=%d neg=%d max=%d empty='%s' hex=%x long=%s\n",
          0, INT_MIN_VALUE, INT_MAX_VALUE, "", 0xffffffffU,
          long_test_text);
 
