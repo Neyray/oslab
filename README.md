@@ -11,7 +11,7 @@
 ```
 ~/projects/oslab/
 ├── README.md            本文件，仓库总览
-├── CLAUDE.md            AI 辅助工具的工作约定
+├── AGENTS.md            AI 辅助工具的工作约定
 ├── docs/                课程发放文档（docx 转 md，便于检索与交叉引用）
 │   ├── 05-学生须知.md            规则、评分、工作流、AI 政策
 │   ├── 06-环境安装指引.md        工具链安装与 preflight 自检
