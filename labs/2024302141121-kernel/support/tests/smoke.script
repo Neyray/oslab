@@ -1,0 +1,5 @@
+# Core syscall path and deterministic unknown-syscall failure behavior.
+SEND hi
+EXPECT hi: user program running, pid=[0-9]+
+SEND badecall
+EXPECT TEST-1 PASS

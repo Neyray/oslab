@@ -1,0 +1,11 @@
+# One over-capacity line followed by three ordinary lines.
+SEND bufstorm
+WAIT 200
+SEND xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+WAIT 200
+SEND two
+WAIT 200
+SEND three
+WAIT 200
+SEND four
+EXPECT BUFSTORM lines=4

@@ -77,7 +77,7 @@ python3 ~/projects/oslab/materials/preflight.py
 | --- | --- | --- | --- | --- |
 | lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 仓库电子成果完成；现场手绘件需本人复刻 |
 | lab1 | 裸机启动与输出 | 自实现 `printf` + banner | [notes/lab1/](notes/lab1/) | 实现与自动化自检完成，待现场验收 |
-| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | — | 未开始 |
+| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | [notes/lab2/](notes/lab2/) | 实现与自动化自检完成，待现场验收 |
 | lab3 | SV39 页表与物理内存管理 | `dump_pagetable` | — | 未开始 |
 | lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |
 | lab5 | 写时复制 COW 与系统调用 | `pmc(0)` / `pmc(1)` 计数 | — | 未开始 |

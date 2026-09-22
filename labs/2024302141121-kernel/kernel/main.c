@@ -1,11 +1,12 @@
 #include "types.h"
 #include "course_sid.h"
+#include "proc.h"
+#include "defs.h"
 
 extern void console_init(void);
 extern void console_checksum_reset(void);
 extern uint64 console_checksum_value(void);
 extern void console_checksum_pause(void);
-extern int printf(const char *format, ...);
 
 #define INT_MIN_VALUE (-2147483647 - 1)
 #define INT_MAX_VALUE 2147483647
@@ -38,6 +39,10 @@ main(void)
   console_checksum_pause();
 #endif
 
-  for (;;)
-    asm volatile("wfi");
+  vm_init();
+  trap_init();
+  proc_init();
+  printf("lab2 ready: tick=%d buffer=%d semantics=%d\n", LAB2_TICK,
+         LAB2_BUF_SIZE, LAB2_BUF_SEMANTICS);
+  proc_enter_user();
 }

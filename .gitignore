@@ -20,6 +20,9 @@ kernel.asm
 *.img
 **/kernel/kernel
 fs.img
+**/user-flat/
+**/kernel/userimg.S
+**/user/usys.S
 
 # --- 归档包 ---
 lab*-*.zip
