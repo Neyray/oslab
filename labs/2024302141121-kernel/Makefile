@@ -9,7 +9,7 @@ OBJS = kernel/entry.o kernel/start.o kernel/console.o kernel/printf.o \
        kernel/proc.o kernel/syscall.o kernel/trap.o kernel/kernelvec.o \
        kernel/timervec.o kernel/trampoline.o kernel/userimg.o kernel/main.o
 
-UPROGS = sh hi spin badecall bufstorm
+UPROGS = sh hi spin badecall bufstorm readcap readempty syserr
 
 OBJCOPY ?= riscv64-unknown-elf-objcopy
 

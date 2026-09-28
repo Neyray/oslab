@@ -26,6 +26,7 @@ static struct {
   uint8 data[LAB2_BUF_SIZE];
   uint64 read_index;
   uint64 write_index;
+  uint64 lines;   /* queued '\n' bytes, i.e. complete unread records */
   uint64 dropped;
 } input;
 
@@ -80,6 +81,7 @@ console_init(void)
   checksum_enabled = 0;
   input.read_index = 0;
   input.write_index = 0;
+  input.lines = 0;
   input.dropped = 0;
 
   /* lab1 is polling-only; keep the 16550 interrupt sources disabled. */
@@ -109,16 +111,46 @@ console_intr(void)
 
     if (input.write_index - input.read_index < LAB2_BUF_SIZE) {
       input.data[input.write_index++ % LAB2_BUF_SIZE] = byte;
+      if (byte == '\n')
+        input.lines++;
     } else {
       input.dropped++;
       /* Preserve a record boundary so an overlong line cannot deadlock read. */
-      if (byte == '\n')
-        input.data[(input.write_index - 1) % LAB2_BUF_SIZE] = byte;
+      if (byte == '\n') {
+        uint8 *last = &input.data[(input.write_index - 1) % LAB2_BUF_SIZE];
+        if (*last != '\n')
+          input.lines++;
+        *last = byte;
+      }
     }
 
     /* Echo is part of the console contract even if the ring is full. */
     console_putc(byte);
   }
+}
+
+/*
+ * The personal semantics differ only in when a waiting reader may start:
+ * line mode needs a complete record, stream mode needs any byte. lab4 turns
+ * this predicate into the wakeup condition of a real sleep queue.
+ */
+static int
+input_readable(void)
+{
+#if LAB2_BUF_SEMANTICS == 0
+  return input.lines > 0;
+#else
+  return input.read_index != input.write_index;
+#endif
+}
+
+/* Interrupts are off on entry and exit; wfi returns after any trap. */
+static void
+wait_for_input_event(void)
+{
+  intr_on();
+  asm volatile("wfi");
+  intr_off();
 }
 
 int
@@ -133,24 +165,24 @@ console_read(void *destination, int length)
 
   interrupts_were_enabled = intr_get();
   intr_off();
+  while (!input_readable())
+    wait_for_input_event();
+
   while (count < length) {
     uint8 byte;
 
-    while (input.read_index == input.write_index) {
-      intr_on();
-      asm volatile("wfi");
-      intr_off();
-    }
+    /* Only a multi-byte stream read can outrun the producer here. */
+    while (input.read_index == input.write_index)
+      wait_for_input_event();
 
     byte = input.data[input.read_index++ % LAB2_BUF_SIZE];
     output[count++] = byte;
 
-    if (byte == '\n' || byte == '\r')
+    /* console_intr() already maps '\r' to '\n'. */
+    if (byte == '\n') {
+      input.lines--;
       break;
-#if LAB2_BUF_SEMANTICS == 1
-    if (length == 1)
-      break;
-#endif
+    }
   }
 
   if (interrupts_were_enabled)

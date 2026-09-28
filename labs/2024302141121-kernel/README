@@ -1,34 +1,29 @@
-lab1 启动与串口输出
-===================
+oslab 个性化内核 (学号 2024302141121)
+=====================================
 
-学号: 2024302141121
-协议: LAB1_BANNER_PROTOCOL=2
-启动栈: LAB1_STACK_KB=12
-节流周期: 16 + COURSE_SID % 16 = 17 个物理字节
+本目录是 ~/projects/oslab 主仓库中的累积内核代码树，lab1–lab7 在此持续演进，
+不单独初始化 Git。设计说明、验收清单和实测记录在 ../../notes/labN/。
 
-本目录是 ~/projects/oslab 主仓库中的累积内核代码树，不单独初始化 Git。
-lab1 已实现以下内容:
+已完成
+  lab1  启动与串口输出: M→S 切换、PMP、轮询 UART、printf、协议 2 Banner
+  lab2  陷入与系统调用、PLIC/UART 中断输入、M 态定时器桥接、_uprog_table 装载 sh
 
-  - kernel/entry.S: M 态入口、12 KiB 栈、单核停驻和对齐陷阱向量
-  - kernel/start.c: M→S 切换、delegation、PMP 和 Bare satp
-  - kernel/console.c: 16550 轮询输出、个性化协议和节流
-  - kernel/printf.c: 最小格式化输出
-  - kernel/main.c: banner、printf 边界自检和协议 2 校验和
-  - expect_banner.txt: QEMU 串口输出的逐字节期望值
-
-构建与运行:
-
+构建与运行
   make clean && make
-  make qemu
+  make qemu                       # 退出: Ctrl-a 松开再按 x
 
-退出 QEMU: 依次按 Ctrl-a、松开，再按 x。
-设计、测试命令和实测记录见 ../../notes/lab1/。
+测试
+  python3 check_expect.py 2024302141121                                  # lab1 格式自检
+  python3 support/inject_uart.py --tree . --script support/tests/smoke.script
+  python3 support/inject_uart.py --tree . --script support/tests/bufstorm.script
+  python3 tests/lab1_selftest.py  # lab1 自测: printf 边界 + 协议格式边界
+  python3 tests/lab2_selftest.py  # lab2 自测: readcap / readempty / syserr
 
-以下文件为课程预置接口，lab1 实现过程中保持不变:
-
-  Makefile
-  kernel/kernel.ld
-  kernel/riscv.h
-  kernel/types.h
-  kernel/memlayout.h
-  kernel/course_sid.h
+目录
+  kernel/          内核源码; kernel.ld riscv.h types.h memlayout.h course_sid.h
+                   trampoline.S syscall.h param.h vm.h 等为课程预置, 不修改
+  user/            用户程序; sh hi spin usys.pl ulib.c printf.c user.h user.ld 为预置,
+                   badecall bufstorm 为官方测试, readcap readempty syserr 为自测用例
+  support/         课程提供的 inject_uart.py 与官方测试脚本
+  tests/           自写测试驱动 (harness.py 与 lab1/lab2 自测)
+  expect_banner.txt  lab1 Banner 的逐字节期望值
