@@ -15,9 +15,9 @@
 | `COURSE_SID` | 2024302141121 | Banner 第一行十进制 |
 | `COURSE_SID % 97` | 35 = `0x23` | Banner 第一行十六进制 |
 | `LAB1_BANNER_PROTOCOL` | 2 | 正文后追加 `[chk=12536]` |
-| `LAB1_STACK_KB` | 12 | `start.c:21` 定义 `boot_stack`，`entry.S:28-30` 算栈顶 |
-| 节流周期 `16 + SID % 16` | 17 | `console.c:12`，每 17 个物理字节插一段 nop |
-| 节流长度 `32 + SID % 32` | 33 | `console.c:13`，每段 nop 的条数 |
+| `LAB1_STACK_KB` | 12 | `start.c` 定义 `boot_stack`，`entry.S:28-30` 算栈顶 |
+| 节流周期 `16 + SID % 16` | 17 | `console.c` 的 `THROTTLE_PERIOD`，每 17 个物理字节插一段 nop |
+| 节流长度 `32 + SID % 32` | 33 | `console.c` 的 `THROTTLE_NOP_COUNT`，每段 nop 的条数 |
 
 ## 现场验收流程
 
@@ -29,7 +29,16 @@
 4. 三题问答：4 道思考题 + 实现细节（[design.md](design.md) 第 3–5 节）
 5. 抽查 lab0 三张设计图纸（主干流转正确即可）
 
-`lab1-submit` 指向最新提交，和 lab2 是同一棵累积内核：前 3 行（205 字节）是 lab1 Banner，后面接着 lab2 的 `lab2 ready` 和 `sh>`。如果老师要求“整段输出只有 Banner”，就用备用标签 `lab1-submit-v1`（lab1 原始提交 `0e54dad`）演示，见 test-plan.md 第 1.3 节。
+lab1 验收请检出 `lab1-submit` 演示（命令见 test-plan.md 第 1 节），它的整段输出就是 Banner。
+
+## 两个标签的分工
+
+| 标签 | 内容 | 内核输出 |
+| --- | --- | --- |
+| `lab1-submit` | lab1 代码 + 本轮笔记 + lab1 自测用例 | 正好是 205 字节的 Banner，然后停在 `wfi` |
+| `lab2-submit` | lab1–lab2 累积代码 + 两轮笔记与自测 | Banner 之后继续打印 `lab2 ready` 和 `sh>` |
+
+lab1 任务书要求“内核实跑输出与 expect 逐字节比对”，所以 `lab1-submit` 必须是只打印 Banner 的版本，不能和 lab2 共用一个提交。lab2 验收时的“lab1 Banner 回归”是在累积内核上比较前 3 行。两个标签下的 lab1 笔记和自测脚本内容相同。
 
 ## 自测用例（任务书：printf 边界 + 协议格式边界）
 

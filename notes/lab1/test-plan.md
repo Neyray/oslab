@@ -13,12 +13,18 @@
 
 ## 1 现场验收
 
-### 1.1 构建
+### 1.1 检出 lab1 版本并构建
+
+`lab1-submit` 的内核只打印 Banner。main 上是 lab1–lab2 的累积内核，所以先用 worktree 单独检出 lab1 版本（不影响主工作区）：
 
 ~~~bash
-cd ~/projects/oslab/labs/2024302141121-kernel
+cd ~/projects/oslab
+git worktree add /tmp/lab1 lab1-submit
+cd /tmp/lab1/labs/2024302141121-kernel
 make clean && make
 ~~~
+
+验收结束后执行 `cd ~/projects/oslab && git worktree remove /tmp/lab1`。
 
 通过标准：退出码 0；`-Wall -Werror` 下没有任何 warning。**实测：通过。**
 
@@ -37,10 +43,10 @@ make qemu                      # 看完按 Ctrl-a 松开再按 x 退出
 
 timeout 3s qemu-system-riscv64 -machine virt -bios none \
   -kernel kernel/kernel -nographic > /tmp/l1.txt 2>/dev/null
-head -c 205 /tmp/l1.txt | cmp - expect_banner.txt && echo BANNER_OK
+cmp /tmp/l1.txt expect_banner.txt && echo FULL_OK
 ~~~
 
-期望的前 205 字节：
+期望的整段输出（205 字节）：
 
 ~~~text
 OSLAB1 sid=2024302141121 mod97=0x23
@@ -48,21 +54,7 @@ selftest zero=0 neg=-2147483648 max=2147483647 empty='' hex=0xffffffff long=0123
 [chk=12536]
 ~~~
 
-**实测：`BANNER_OK`。** 当前内核是 lab1–lab2 的累积版本，Banner 之后还会打印 `lab2 ready: tick=3 buffer=64 semantics=1` 和 `sh>`。
-
-如果老师的脚本把**整段输出**与 expect 比较，就用备用标签检出 lab1 原始版本，该版本的整段输出正好 205 字节：
-
-~~~bash
-cd ~/projects/oslab
-git worktree add /tmp/lab1-v1 lab1-submit-v1
-cd /tmp/lab1-v1/labs/2024302141121-kernel && make
-timeout 3s qemu-system-riscv64 -machine virt -bios none \
-  -kernel kernel/kernel -nographic > /tmp/l1v1.txt 2>/dev/null
-cmp /tmp/l1v1.txt expect_banner.txt && echo FULL_OK
-cd ~/projects/oslab && git worktree remove /tmp/lab1-v1
-~~~
-
-**实测（2026-09-28）：`FULL_OK`。**
+**实测：`FULL_OK`。** 之后 lab2 的累积内核会在 Banner 后继续输出，lab2 的回归测试只比较前 3 行（`head -n 3`）。
 
 ### 1.4 源码核查（问答时可能要求指出）
 
@@ -136,14 +128,11 @@ e、f 验证的是 `console_putc` 的 `#if LAB1_BANNER_PROTOCOL` 分支。这两
 
 ~~~bash
 cd ~/projects/oslab
-git status --short                     # 应为空
-git log -1 --oneline lab1-submit       # 与 main 相同
+git status --short
+git log -1 --oneline lab1-submit
 git archive --format=zip -o 提交-lab1-2024302141121.zip lab1-submit
 ~~~
 
-| 标签 | 指向 | 用途 |
-| --- | --- | --- |
-| `lab1-submit` | 最新提交（与 `lab2-submit` 相同） | 正式提交版本，包含本轮笔记和自测用例 |
-| `lab1-submit-v1` | `0e54dad` | lab1 原始版本，整段输出只有 Banner，备用演示 |
+`lab1-submit` 是在 lab1 原始提交 `0e54dad` 之上补入本轮笔记和自测用例的提交，不在 main 的直线历史上，因为 main 上的内核已经包含 lab2。两个标签的分工见 [README.md](README.md#两个标签的分工)。
 
 归档包放在 Windows 侧 `OS实践/lab1/提交-lab1-2024302141121.zip`。

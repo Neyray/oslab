@@ -1,6 +1,6 @@
 # lab1 设计与验收问答
 
-依据 lab1 实验说明书 V2。第 1–2 节讲清“做了什么”，第 3 节逐题回答 4 道思考题（现场问答从这里抽），第 4–6 节应对追问和故障定位。行号按当前 `labs/2024302141121-kernel/` 源码核对。
+依据 lab1 实验说明书 V2。第 1–2 节讲清“做了什么”，第 3 节逐题回答 4 道思考题（现场问答从这里抽），第 4–6 节应对追问和故障定位。本笔记同时存在于 `lab1-submit` 和 `lab2-submit` 两个标签下；`console.c`、`start.c`、`main.c` 在 lab2 中有增补，所以这三个文件按函数名定位，只给出两个版本中都不变的行号。
 
 ## 目录
 
@@ -61,8 +61,8 @@ QEMU reset ROM @ 0x1000                               M 态
 | `mepc` | `main` | 决定 `mret` 之后的第一条指令 |
 | `medeleg` / `mideleg` | `0xffff` | 把能委托的异常/中断交给 S 态 |
 | `sie` | 0 | 委托了，但 S 态中断源一个都不开 |
-| `pmpaddr0` | `0x3fffffffffffff` | NAPOT 编码，覆盖整个物理地址空间（`start.c:59`） |
-| `pmpcfg0` | `0xf` | R=W=X=1，A=NAPOT，L=0（`start.c:60`） |
+| `pmpaddr0` | `0x3fffffffffffff` | NAPOT 编码，覆盖整个物理地址空间（`start.c` 的 `w_pmpaddr0`） |
+| `pmpcfg0` | `0xf` | R=W=X=1，A=NAPOT，L=0（`start.c` 的 `w_pmpcfg0`） |
 | `satp` + `sfence.vma` | 0 | Bare 模式，不做地址翻译 |
 | `tp` | `mhartid` | 记下当前 hart 编号 |
 
@@ -70,8 +70,8 @@ lab2 在这里又加了 CLINT 定时器配置，`mtvec` 改指向 `timervec`。P
 
 ### console.c：两层输出
 
-- `uartputc_sync()`（`console.c:63`）负责**物理字节**：循环读 LSR，等到 bit5（THRE）为 1 再写 THR。MMIO 访问前后都加 `io_fence()`，最后调用 `throttle_after_byte()` 做个人节流。
-- `console_putc()`（`console.c:195`）负责**逻辑字符**：如果校验和统计处于开启状态，先累加字节值，再交给 `uartputc_sync`。协议 1 在这里多发一个 `.`。
+- `uartputc_sync()`负责**物理字节**：循环读 LSR，等到 bit5（THRE）为 1 再写 THR。MMIO 访问前后都加 `io_fence()`，最后调用 `throttle_after_byte()` 做个人节流。
+- `console_putc()`负责**逻辑字符**：如果校验和统计处于开启状态，先累加字节值，再交给 `uartputc_sync`。协议 1 在这里多发一个 `.`。
 - `console_checksum_reset/value/pause()` 分别是清零并开始统计、读取当前值、暂停统计。
 
 > 💭 校验和统计的是逻辑字符，节流统计的是物理字节，两者故意分开。协议 1 插入的 `.` 会占用串口带宽，应该参与节流，但它不是正文内容，不应该算进协议内容。把协议逻辑放在 `console_putc`，UART 驱动就不需要知道学号协议是什么。
@@ -94,7 +94,7 @@ console_checksum_pause();          /* 否则 [chk=...] 自己也会被加进去 
 printf("[chk=%lu]\n", sum);
 ~~~
 
-第二行 `selftest` 就是 printf 边界自测（T1-1a–f）。它会被计入校验和，所以不能随便删。`#ifdef LAB1_PRINTF_EXTRA_TEST`（`main.c:42`）是只有测试构建才会编译的额外格式用例，默认输出不受影响。
+第二行 `selftest` 就是 printf 边界自测（T1-1a–f）。它会被计入校验和，所以不能随便删。`main()` 末尾的 `#ifdef LAB1_PRINTF_EXTRA_TEST` 是只有测试构建才会编译的额外格式用例，默认输出不受影响。
 
 ## 3 思考题
 
@@ -148,7 +148,7 @@ PMP 按编号从低到高匹配，第一个匹配的表项的 R/W/X 位决定是
 `2024302141121 % 97 = 35 = 0x23`。任务书要求小写 `0x`、不补前导零。我的 `%x` 自带前缀，所以格式串里不能再写 `0x`，否则会变成 `0x0x23`。
 
 **问：栈多大，在哪？**
-12 KiB（`LAB1_STACK_KB=12`，12288 = 0x3000 字节），16 字节对齐，定义在 `start.c:21`。`entry.S` 用同一个宏计算栈顶。
+12 KiB（`LAB1_STACK_KB=12`，12288 = 0x3000 字节），16 字节对齐，定义在 `start.c` 的 `boot_stack`。`entry.S` 用同一个宏计算栈顶。
 
 **问：节流是怎么回事？**
 `THROTTLE_PERIOD = 16 + SID % 16 = 17`，`THROTTLE_NOP_COUNT = 32 + SID % 32 = 33`。每发 17 个物理字节，执行 33 条真实的 `nop`。源码直接用 `COURSE_SID` 计算，不写死数字。
