@@ -76,8 +76,8 @@ python3 ~/projects/oslab/materials/preflight.py
 | 轮次 | 主题 | 内部观测设施（交付物，同时是调试手段） | 笔记 | 状态 |
 | --- | --- | --- | --- | --- |
 | lab0 | 阅读与剖析（热身，通过制） | 三份图纸 | [notes/lab0/](notes/lab0/) | 仓库电子成果完成；现场手绘件需本人复刻 |
-| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | [notes/lab1/](notes/lab1/) | 实现与自动化自检完成，待现场验收 |
-| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | [notes/lab2/](notes/lab2/) | 实现与自动化自检完成，待现场验收 |
+| lab1 | 裸机启动与输出 | 自实现 `printf` + banner | [notes/lab1/](notes/lab1/) | 实现、自测用例（`tests/lab1_selftest.py`）完成，待现场验收 |
+| lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | [notes/lab2/](notes/lab2/) | 实现、自测用例（`tests/lab2_selftest.py`）完成，待现场验收 |
 | lab3 | SV39 页表与物理内存管理 | `dump_pagetable` | — | 未开始 |
 | lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |
 | lab5 | 写时复制 COW 与系统调用 | `pmc(0)` / `pmc(1)` 计数 | — | 未开始 |
@@ -134,7 +134,7 @@ make
 
 只有 `reference/` 由 [.gitignore](.gitignore) 排除；`labs/2024302141121-kernel/` 属于本仓库正常版本控制范围。实验代码、设计笔记和材料因此可以在同一条历史中相互对应。
 
-当前导入的是教师发放的 lab1 原始骨架：`entry.S`、`start.c`、`console.c`、`printf.c`、`main.c` 仍只有说明性注释，尚未开始实验一实现。预置文件 `kernel.ld`、`riscv.h`、`types.h`、`memlayout.h` 和 `course_sid.h` 不得修改。
+当前代码树已完成 lab1 与 lab2，并合入 lab2 增量包。预置文件（`kernel.ld`、`riscv.h`、`types.h`、`memlayout.h`、`course_sid.h`，以及增量包的 `trampoline.S`、`syscall.h`、用户库和 sh/hi/spin）不得修改；自测需要换参数时，一律在临时副本中修改。
 
 课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。本主仓库已经完成 `git init`，后续不要在 `labs/` 内重复初始化；提交、标签和归档由学生本人操作。
 

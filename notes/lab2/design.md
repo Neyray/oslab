@@ -1,319 +1,237 @@
 # lab2 设计与验收问答
 
-本文按 Lab2 V2 实验说明书的四个阶段、三道思考题和增量包列出的五项设计决策组织。任务书原题保留独立题号，便于现场抽题后直接定位；实现细节以当前个性化内核为准，不把 MIT xv6 的完整进程模型误当成本实验已经具备的能力。
+依据 lab2 实验说明书 V2 和增量包《能力目标与接口约定》。第 1–3 节讲清“做了什么”，第 4 节逐题回答 3 道思考题，第 5 节回答增量包要求说明的设计决策，第 6 节列出与任务书不同的地方，第 7–8 节应对追问和故障定位。行号按当前 `labs/2024302141121-kernel/` 源码核对。
 
 ## 目录
 
-- [0 个性化参数速查](#0-个性化参数速查)
-- [1 系统主线与四阶段能力](#1-系统主线与四阶段能力)
-- [2 两条完整控制流](#2-两条完整控制流)
-- [3 V2 思考题完整回答](#3-v2-思考题完整回答)
-  - [3.1 ecall 与 sret 的硬件软件分工](#31-ecall-与-sret-的硬件软件分工)
-  - [3.2 sepc 在系统调用与中断中的处理差别](#32-sepc-在系统调用与中断中的处理差别)
-  - [3.3 行缓冲与字符流语义](#33-行缓冲与字符流语义)
-- [4 增量包设计决策](#4-增量包设计决策)
-- [5 现场三题速答](#5-现场三题速答)
-- [6 高频追问与可能问题](#6-高频追问与可能问题)
-- [7 故障现象与日志定位](#7-故障现象与日志定位)
+1. [系统主线与四个阶段](#1-系统主线与四个阶段)
+2. [两张控制流图](#2-两张控制流图)
+3. [逐模块实现要点](#3-逐模块实现要点)
+4. [思考题](#4-思考题)
+5. [增量包设计决策](#5-增量包设计决策)
+6. [与任务书不同的地方](#6-与任务书不同的地方)
+7. [高频追问](#7-高频追问)
+8. [故障现象与日志定位](#8-故障现象与日志定位)
 
-建议先记住第 0、1 节中的个人参数和主链路，再熟练复述第 3 节三道原题。第 4 节用于回答“为什么这样设计”，第 6、7 节用于应对实现追问和现场故障定位。
-
-## 0 个性化参数速查
-
-| 项目 | 当前值 | 实现影响 |
-| --- | ---: | --- |
-| 学号 | `2024302141121` | 个性化参数唯一来源为 `course_sid.h` |
-| `LAB2_TICK` | 3 | M 态定时器间隔为 `100000 × 3` 个 timebase 单位 |
-| `LAB2_BUF_SEMANTICS` | 1 | 字符流：字符到达即可使单字节读取继续 |
-| `LAB2_BUF_SIZE` | 64 | UART 接收环形缓冲区容量为 64 字节 |
-| 用户映像空间 | 64 KiB | 每进程独立，包含程序数据与向下增长的用户栈 |
-| 每进程内核栈 | 8 KiB | trap 后切换到当前进程自己的内核栈 |
-| 最大进程槽位 | 8 | 静态槽位，满足本轮 Shell 的单子进程顺序执行 |
-| 未知系统调用错误码 | `-1` | 不 panic，不越界访问分发表 |
-
-## 1 系统主线与四阶段能力
+## 1 系统主线与四个阶段
 
 ~~~text
-M 态 _entry/start
-  ├─ 保留 Lab1 的 PMP、UART 输出和 Banner
-  ├─ 配置 CLINT M 态定时器与 timervec
-  └─ mret → S 态 main
-       ├─ vm_init：最小内核/用户/跳板映射
-       ├─ trap_init：kernelvec、PLIC、UART、SSIP/SEIE
-       ├─ proc_init：从 _uprog_table 装入 sh
-       └─ usertrapret → userret → sret → U 态 sh
-            ├─ read：UART 中断输入
-            ├─ write/getpid：基础系统调用
-            └─ fork → child exec → exit → parent wait 返回
+_entry / start()                                   M 态
+  lab1 的 PMP、MPP、mepc 不变；新增 CLINT 定时器与 timervec
+  └─ mret → main()                                 S 态
+       Banner（lab1 回归）
+       vm_init      最小 SV39 映射：内核恒等映射 + TRAMPOLINE
+       trap_init    stvec=kernelvec，PLIC，UART IER，sie.SEIE|SSIE
+       proc_init    槽 0 装入 sh
+       proc_enter_user → usertrapret → userret → sret
+            └─ sh                                  U 态
+                 read/write → ecall → 内核 → 返回
+                 fork → wait → 子进程 exec(name) → exit → 父进程从 wait 返回
 ~~~
 
-V2 说明书的四阶段与当前代码对应如下：
-
-| 阶段 | 任务书目标 | 当前实现位置 | 验证现象 |
+| 阶段 | 任务书目标 | 代码 | 验证 |
 | --- | --- | --- | --- |
-| 一 | uservec/usertrap/usertrapret/userret 往返 | `trampoline.S`、`trap.c`、`proc.h` | 能从 U 态 ecall 后返回下一条指令 |
-| 二 | getpid、write、exit 与非法编号容错 | `syscall.c` | `hi` 输出 PID，`badecall` PASS |
-| 三 | PLIC、UART 中断和环形输入缓冲 | `trap.c`、`console.c` | 输入回显，`bufstorm` 四行完成 |
-| 四 | `_uprog_table` 装载 Shell 和子程序 | `proc.c`、生成的 `userimg.S` | 出现 `sh>`，可执行 `hi/spin` |
+| 一 陷入框架 | uservec → usertrap → usertrapret → userret 往返 | `trampoline.S`（只读）、`trap.c:79 usertrap`、`trap.c:119 usertrapret`、`proc.h` trapframe | ecall 能返回到下一条指令 |
+| 二 系统调用分发 | getpid/write/exit，未知调用号返回 −1 | `syscall.c:96 syscall` | `hi` 打出 pid，`badecall`、T2-3 通过 |
+| 三 中断驱动输入 | UART 中断 → 环形缓冲 → read | `trap.c:62 trap_init`、`console.c:100 console_intr`、`console.c:157 console_read` | 敲键盘有回显，`bufstorm`、T2-1、T2-2 通过 |
+| 四 装载 Shell | `_uprog_table` 找到 sh，第一次进入 U 态 | `proc.c:205 proc_exec`、`proc.c:246 proc_init` | 出现 `sh>`，能执行 `hi`、`spin` |
 
-当前实现额外补齐了增量包明确要求的最小 `fork/wait/exec/exit` 状态闭环，但没有提前实现 Lab4 的通用抢占调度器。
+## 2 两张控制流图
 
-## 2 两条完整控制流
+### 2.1 一次 write 系统调用的完整往返
 
-### 2.1 一次 write 系统调用往返
+| # | 位置 | 特权级 / 栈 / 页表 | 动作与寄存器去向 |
+| --- | --- | --- | --- |
+| 1 | 用户桩 `write`（`usys.S`） | U / 用户栈 / 用户页表 | `a0=fd a1=buf a2=n a7=SYS_write(16)`，执行 `ecall` |
+| 2 | 硬件 | U→S | `sepc`←ecall 地址；`scause`←8；`SPP`←U；`SPIE`←SIE，SIE←0；PC←`stvec`（uservec 的 TRAMPOLINE 地址） |
+| 3 | `uservec` | S / 仍是用户 sp / 用户页表 | `csrw sscratch,a0` 暂存用户 a0；a0←TRAPFRAME；31 个寄存器存入 trapframe（a0 在偏移 112）；读出 `kernel_sp/kernel_trap/kernel_satp`；切 satp、换 sp，跳 usertrap |
+| 4 | `usertrap()` | S / 进程内核栈 / 内核页表 | `stvec`←kernelvec；`epc`←`sepc`；scause==8 时 **`epc += 4`**（`trap.c:88`），然后调 `syscall()` |
+| 5 | `syscall()` | 同上 | 调用号←`trapframe->a7`；`switch` 到 `sys_write`；`proc_copyin` 检查并复制用户缓冲区；逐字节 `console_putc`；返回值→`trapframe->a0` |
+| 6 | `usertrapret()` | 同上 | 关中断；`stvec`←uservec；填写 trapframe 头部 4 个内核字段；`SPP`←U、`SPIE`←1；`sepc`←`epc`；调用 `userret(user_satp)` |
+| 7 | `userret` | S→U | 切回用户页表；从 trapframe 恢复寄存器（a0 = 返回值）；`sret`，从 ecall 的下一条指令继续 |
 
-```mermaid
-sequenceDiagram
-    participant U as U 态 用户栈
-    participant V as uservec 跳板
-    participant K as S 态 进程内核栈
-    participant R as userret 跳板
-    U->>V: a0=fd a1=buf a2=n a7=SYS_write ecall
-    Note over V: sscratch 暂存用户 a0<br/>通用寄存器写入 trapframe
-    V->>K: 读取 kernel_sp/kernel_satp/kernel_trap
-    K->>K: usertrap 保存 sepc 并对 ecall 加 4
-    K->>K: syscall 解包参数 copyin 后写 UART
-    K->>R: 返回值写 trapframe a0
-    Note over K,R: stvec 指回 uservec<br/>SPP=U SPIE=1 sepc=下一条指令
-    R->>U: 恢复寄存器并 sret
-```
+### 2.2 一次键盘中断的完整路径
 
-调用桩由只读 `user/usys.pl` 生成。它把系统调用号放进 `a7`，参数按 RISC-V ABI 位于 `a0-a2`。硬件执行 ecall 后不保存通用寄存器、不换栈，实际保存工作由 `uservec` 完成。`usertrap()` 在 `kernel/trap.c:79` 保存 `sepc`，仅对 cause 8 推进 4 字节；`syscall()` 在 `kernel/syscall.c:96` 写回 `a0`；`usertrapret()` 在 `kernel/trap.c:119` 准备返回环境。
+~~~text
+按键 → UART 收到字节，IER=1 触发接收中断（IRQ 10）
+  → PLIC：priority[10]=1，S 态 enable 打开 bit 10，threshold=0     trap.c:29 plic_init
+  → CPU：sie.SEIE=1 且 sstatus.SIE=1
+         （在用户态靠 usertrapret 设 SPIE=1；在内核等待时由 console_read 执行 intr_on）
+  → 用户态进 uservec，内核态进 kernelvec；scause = 0x8000000000000009
+  → device_interrupt()：claim 拿到 irq=10 → console_intr() → 把 10 写回完成 complete   trap.c:38
+  → console_intr()（生产者）：LSR.DR=1 时循环读 RBR；'\r' 转成 '\n'；
+         未满：入队，遇到 '\n' 时 lines++；已满：丢弃，dropped++，但保留换行；回显
+  → console_read()（消费者）：之前在 wfi 里等；中断返回后 wfi 结束，
+         重新检查 input_readable()，成立则取出字节 → proc_copyout → 返回用户
+~~~
 
-### 2.2 一次键盘中断路径
+lab2 还没有真正的 sleep/wakeup，“唤醒”就是中断返回后 `wfi` 结束，读者重新检查条件。任务书允许这样做。它的局限是等待期间 CPU 不能去运行别的进程。lab4 要改成加锁的“检查条件 → 进入睡眠队列 → 原子地释放锁”，由中断处理函数调用 wakeup。
 
-```mermaid
-flowchart LR
-    A[键盘字节进入 UART] --> B[IER 接收中断使能]
-    B --> C[PLIC IRQ 10 pending]
-    C --> D[sie.SEIE 与 sstatus.SIE]
-    D --> E[uservec 或 kernelvec]
-    E --> F[device_interrupt claim]
-    F --> G[console_intr 读取 RBR]
-    G --> H[64 字节环形缓冲并回显]
-    H --> I[console_read 从 wfi 继续]
-    I --> J[copyout 到用户缓冲]
-```
+## 3 逐模块实现要点
 
-`trap_init()` 在 `kernel/trap.c:62` 接通 PLIC、UART IER 和 S 态外部中断；生产者 `console_intr()` 位于 `kernel/console.c:98`；消费者 `console_read()` 位于 `kernel/console.c:125`。当前尚无 Lab4 的 sleep/wakeup 队列，空缓冲时临时打开中断并执行 `wfi`，有字符后在同一当前进程中继续。
+### 3.1 trapframe（`proc.h`）
 
-## 3 V2 思考题完整回答
+| 偏移 | 0 | 8 | 16 | 24 | 32 | 40–104 | 112 | … | 280 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 字段 | kernel_satp | kernel_sp | kernel_trap | epc | kernel_hartid | ra sp gp tp t0–t2 s0 s1 | a0 | a1–a7 s2–s11 t3–t5 | t6 |
 
-### 3.1 ecall 与 sret 的硬件软件分工
+汇编只认识数字偏移，比如 `sd a0, 112(...)`。`proc.c:36-39` 用编译期断言固定 `a0=112`、`t6=280`，字段顺序错了会直接编译失败。前 5 个字段由 `usertrapret` 在每次返回用户态前填好（`trap.c:129-132`），这就是任务书提示中“是谁在陷入之前把它们填好的”的答案。
 
-> **原题 1：ecall 与 sret 执行时硬件各做了什么？RISC-V 为什么不在硬件层面自动保存通用寄存器、切换栈？**
+### 3.2 usertrap / kerneltrap / usertrapret（`trap.c`）
 
-**结论：** 从 U 态执行 ecall 时，硬件记录异常原因和返回位置、切换到 S 态并跳到 `stvec`；它不会保存通用寄存器，也不会自动把用户栈换成内核栈。sret 根据 `sstatus.SPP` 恢复目标特权级，把 `pc` 设为 `sepc`，并按 `SPIE` 恢复中断使能状态；通用寄存器和栈同样由软件事先准备。
+- `usertrap`：一进来先把 `stvec` 改成 kernelvec，保存 `sepc`。之后分三路：cause 8 → `epc += 4` 后调 `syscall()`；设备中断 → `device_interrupt()`；其他 → 打印 `scause/sepc/stval` 后停机。
+- `kerneltrap`：只接受 S 态下的设备中断。进入时保存 `sepc/sstatus`，返回前写回，防止嵌套 trap 把它们改掉。
+- `usertrapret`：按任务书列出的 5 项职责逐一完成，最后跳到 TRAMPOLINE 里的 `userret`。
 
-ecall 的关键硬件动作可概括为：
+### 3.3 系统调用（`syscall.c`）
 
-1. `sepc ← ecall` 指令地址。
-2. `scause ← 8`，表示 U 态环境调用。
-3. `sstatus.SPP ← U`，`SPIE ← 原 SIE`，并清除 SIE。
-4. 当前特权级切换为 S，`pc ← stvec`。
+- `argraw(n)` 从 `trapframe->a0..a5` 取参数。
+- 分发用 `switch`，`default` 返回 −1（`syscall.c:131`）。实现了 fork、exit、wait、read、exec、getpid、pause、uptime、write 这 9 个，其余 13 个编号都返回 −1。
+- 写回返回值前先核对 `myproc() == caller`（`syscall.c:136`）。`exit` 和 `wait` 会切换当前进程，不核对的话，返回值会写进别的进程的 trapframe。
+- `sys_write` 只接受 fd 1、2 和非负长度；`sys_read` 只接受 fd 0，长度 0 直接返回 0。用户缓冲区一律经过 `proc_copyin/copyout` 检查。
 
-随后软件必须完成：暂存用户 `a0`、保存通用寄存器到 trapframe、取得可信内核栈和内核页表、进入 C 语言分发函数。当前只读 `trampoline.S` 用 `sscratch` 暂存用户 `a0`，再从 trapframe 头部取出 `kernel_sp`、`kernel_trap`、`kernel_satp` 和 `kernel_hartid`。
+### 3.4 控制台输入（`console.c`）
 
-sret 本身不会“神奇恢复整个进程”。在执行它之前，`usertrapret()` 已经设置 `stvec`、`sstatus`、`sepc` 和 trapframe 环境；`userret` 已恢复通用寄存器。sret 最终只完成特权级、中断状态和 PC 的硬件恢复。
+~~~c
+static struct {
+  uint8 data[LAB2_BUF_SIZE];   /* 64 */
+  uint64 read_index;           /* 单调递增，r */
+  uint64 write_index;          /* 单调递增，w */
+  uint64 lines;                /* [r, w) 中 '\n' 的个数 */
+  uint64 dropped;
+} input;
+~~~
 
-RISC-V 不规定硬件自动保存全部寄存器和切栈，是为了保持 trap 入口机制简单，并把策略交给操作系统：有的异常只需保存少量寄存器，有的系统使用每核栈，有的使用每进程栈；强制硬件保存固定大现场会增加延迟和实现复杂度，也无法适应不同内核的内存布局。
+不变式：元素数 = `w - r`，且 0 ≤ `w - r` ≤ 64；空表示 `r == w`，满表示 `w - r == 64`；`lines` 等于未读区间里换行符的个数。数组下标取模。单核，访问下标时关中断，所以不需要锁。
 
-**可能追问：为什么 trampoline 必须用汇编？**
+两种语义的区别集中在 `input_readable()`（`console.c:138`）：
 
-答：刚进入 trap 时没有可信 C 栈，编译器生成的函数序言会立即使用 `sp`，而此时 `sp` 仍是用户值。汇编必须先在不依赖栈和未保存寄存器的条件下建立可运行环境。
-
-### 3.2 sepc 在系统调用与中断中的处理差别
-
-> **原题 2：处理系统调用时要对 sepc 做什么处理？为什么？时钟中断的处理需要对 sepc 做同样的处理吗？为什么？**
-
-**结论：** ecall 的 `sepc` 指向 ecall 指令自身，所以系统调用分支必须执行 `sepc += 4`；时钟或 UART 中断不能加 4，因为异步中断发生在指令边界，`sepc` 表示中断后应继续执行的位置，额外前移会跳过一条正常用户指令。
-
-RISC-V 当前实验使用的 ecall 是固定 4 字节指令。如果不推进 `sepc`，sret 后再次执行同一条 ecall，于是形成“陷入—返回—再次陷入”的死循环；`write` 的典型表现是同一段输出反复出现。推进动作应在允许中断或执行可能切换进程的系统调用之前完成，使 trapframe 始终保存可恢复的下一条 PC。
-
-中断与异常的语义不同：ecall 是当前指令主动产生的同步异常，这条指令已经完成了“进入内核”的作用，返回时应越过它；时钟和 UART 是外部异步事件，被打断的正常指令并不是错误来源，硬件给出的 `sepc` 已是正确恢复点。当前 `device_interrupt()` 只处理设备并重装定时器，不修改用户 `epc`。
-
-**可能追问：非法指令是否也统一加 4？**
-
-答：不能。非法指令、访问越界等异常必须先按策略终止进程或修复原因；盲目跳过可能掩盖错误并继续执行损坏状态。本轮对非 ecall、非已知中断打印 `scause/sepc/stval` 后停机保留现场。
-
-### 3.3 行缓冲与字符流语义
-
-> **原题 3：行缓冲与字符流两种语义，在中断处理和读取函数里各造成什么差别？如果只改一处，例如只在中断里改唤醒条件，会出什么问题？**
-
-**结论：** 行缓冲以换行为可见记录边界，读者应在一行完成后继续；字符流允许每个字符到达后立即让读者继续。生产者的通知条件和消费者的返回条件必须表达同一种语义，只改一侧会产生不必要等待、短读失控或唤醒后再次睡眠。
-
-| 位置 | 行缓冲 `SEMANTICS=0` | 字符流 `SEMANTICS=1` |
+| | 行缓冲 `SEMANTICS=0` | 字符流 `SEMANTICS=1`（本人） |
 | --- | --- | --- |
-| UART 中断生产者 | 普通字符只入队，换行后才使整行可读 | 每个字符入队后即可使单字节读继续 |
-| `read` 消费者 | 通常读到换行、长度上限或 EOF 才返回 | 可在取得至少一个字符后返回，允许短读 |
-| 空缓冲等待 | 等待一行完成条件 | 等待任一字符条件 |
+| 读者什么时候可以开始读 | `lines > 0`：缓冲区里有完整的一行 | `r != w`：缓冲区里有任意一个字节 |
+| `read(0,&c,1)` 按下 `q` 未按回车 | 继续阻塞 | 立即返回 `q` |
+| 生产者维护 | 入队 `\n` 时 `lines++` | 同左（计数始终维护） |
+| 消费者维护 | 取出 `\n` 时 `lines--`，本次 read 结束 | 同左 |
 
-本人的参数是字符流 1。Shell 的 `gets()` 每次调用 `read(..., 1)`，所以单个字符到达即可返回；`bufstorm` 一次请求 256 字节，当前实现仍收集到换行为止，保留命令和测试所需的记录边界。这是“字符到达即可进展”与“多字节读取不拆散一行”的折中，不影响单字节字符流语义。
+多字节 read（例如 `bufstorm` 的 `read(0,buf,256)`）在两种语义下都读到换行或读满长度才返回，这样官方测试按“一次 read 一行”计数时结果才正确。
 
-只修改生产者唤醒条件而不修改消费者，可能出现“每个字符都触发进展，但消费者醒来后仍坚持等换行”，造成大量无效唤醒；只修改消费者使其按字符返回，而生产者仍只在换行时通知，则字符已经在缓冲区里，读者却一直睡到回车。虽然当前 Lab2 用 `wfi` 而非正式等待队列，这个一致性原则仍决定何时退出等待循环、何时从 `read` 返回。
+> 💭 这一段原来的写法是 `#if LAB2_BUF_SEMANTICS == 1 if (length == 1) break; #endif`。但当 `length == 1` 时，外层 `while (count < length)` 本来就会结束，这个分支是多余的：把宏改成 0，行为完全不变，“行缓冲”并不存在。现在把区别收拢到 `input_readable()` 这一个判断里，并用自测 A2 在语义 0 的副本上验证：按 `q` 不会返回，按回车之后才返回。
 
-## 4 增量包设计决策
+> 💭 缓冲区满时如果连换行也丢掉，超长行之后读者会一直等一个已经被丢弃的回车，`bufstorm` 就是这样卡住的。现在的规则是：换行覆盖最后一个未读字节，`lines` 跟着加 1（被覆盖的字节本来就是换行时不重复计数）。这样既允许丢字符，又保证读者总能遇到行尾。
 
-### 4.1 trapframe 放在哪里，由谁切换
+### 3.5 中断源（`trap.c`、`start.c`、`timervec.S`）
 
-每个进程拥有独立的一页 trapframe，所有用户页表都把自己的 trapframe 映射到相同虚拟地址 `TRAPFRAME`。`struct trapframe` 的前五项依次是 `kernel_satp`、`kernel_sp`、`kernel_trap`、`epc`、`kernel_hartid`，随后从偏移 40 开始排列通用寄存器。编译期断言固定 `a0=112`、`t6=280`，防止 C 布局与预置汇编错位。
+- UART：`console_enable_interrupts` 设置 IER=1；`plic_init` 设置优先级、使能位和阈值；`trap_init` 打开 `sie.SEIE`。
+- 时钟：这台 QEMU CPU 不支持 Sstc，访问 `stimecmp/menvcfg` 会触发 cause 2。所以由 M 态的 CLINT 定时器到期后进入 `timervec`：重新设置 `mtimecmp += 300000`，置 `sip.SSIP`，然后 `mret`。S 态收到 cause 1（软件中断），清掉 SSIP 并执行 `ticks++`。本轮不做抢占，`pause/uptime` 会用到 ticks。
 
-进入用户态前，`usertrapret()` 根据当前进程填入内核运行环境；发生 trap 后，`uservec` 用固定偏移保存现场并切换到该进程内核栈。`fork` 复制父进程 trapframe，再把子进程的 `a0` 改为 0；父进程从 fork 得到子 PID。
+### 3.6 进程与装载（`proc.c`）
 
-> 💭 V2 文档允许使用 Bare 作为过渡，但预置 `trampoline.S` 固定访问高地址 `TRAPFRAME`，用户程序又从地址 0 链接。QEMU 的物理 RAM 不包含这两个裸地址，因此当前实现只建立满足用户低地址、trapframe 和 trampoline 的最小静态 SV39 映射，没有提前实现 Lab3 的通用页表分配器。
+- 静态 8 个槽，每槽有 64 KiB 用户内存、1 页 trapframe、1 张用户页表、8 KiB 内核栈。
+- `proc_exec(name)`：去掉名字末尾的换行，遍历 `_uprog_table`（每项 `{u64 start; u64 end; char name[]}`，8 字节对齐，以 `{0,0}` 结尾）。找到后检查大小，清空 64 KiB，复制平铺二进制，设置 `epc=0`、`sp=64 KiB−16`。
+- `proc_fork`：找空槽，复制整块用户内存和 trapframe，把子进程的 `a0` 设为 0，状态设为 RUNNABLE，返回子进程 pid。
+- `proc_wait`：父进程设为 WAITING，切到它的 RUNNABLE 子进程；没有子进程就返回 −1。
+- `proc_exit`：把子进程 pid 写进父进程的 `a0`，恢复父进程，释放子进程的槽。
 
-### 4.2 输入缓冲、并发保护和溢出策略
+> 💭 exec 从平铺二进制的地址 0 开始执行，但 `user.ld` 里的 `ENTRY(main)` 在 `objcopy -O binary` 之后就丢了。写自测程序 `syserr` 时，GCC 把静态辅助函数排在了 `main` 前面，结果 exec 之后直接执行辅助函数，程序卡住。所以自测里加了 A1 检查：所有内嵌程序的 `main` 都必须在地址 0。`syserr` 改成只保留 `main` 一个函数，其余用宏实现。lab5 如果改用 ELF 装载，就应该读取 `e_entry`，而不是假定入口是 0。
 
-缓冲区使用单调递增的 `read_index` 与 `write_index`，元素数恒为无符号差值 `write_index - read_index`，物理槽位才对 `LAB2_BUF_SIZE=64` 取模。生产者和消费者都运行在单核上；访问共享下标时中断关闭，因此本轮不额外引入自旋锁。
+## 4 思考题
 
-缓冲未满时写入并递增 `write_index`；满时丢弃普通新字符并累计 `dropped`。换行是恢复例外：如果超长行已经填满缓冲，换行会替换最后一个未读数据字节，保证消费者最终遇到记录边界，不会永远等待一个已经被丢弃的回车。
+### 4.1 ecall 与 sret 执行时硬件各做了什么？RISC-V 为什么不在硬件层面自动保存通用寄存器、切换栈？
 
-> 💭 最初严格采用“满时丢弃所有新字符”，100 字节压力测试使换行也被丢弃，`bufstorm` 永久等待。保留换行仍允许丢弃溢出数据，同时给读取路径保留可证明的终止条件。
+**结论：** ecall 只做 4 件事：记录 `sepc`、记录 `scause`、保存特权级和中断状态、跳到 `stvec`。sret 只做 3 件事：恢复特权级、恢复 SIE、PC ← `sepc`。两者都不碰通用寄存器，也不换栈。
 
-空缓冲时，本轮没有真正的 sleep/wakeup，`console_read()` 临时打开中断并执行 `wfi`。Lab4 应把它替换成带锁的“检查条件—进入睡眠队列—原子释放锁”流程，避免丢失唤醒并允许其他进程运行。
+- ecall：`sepc`←ecall 自身地址；`scause`←8；`SPP`←U，`SPIE`←SIE，SIE←0；特权级切到 S，PC←`stvec`。
+- sret：特权级←`SPP`；SIE←`SPIE`；PC←`sepc`。寄存器由 `userret` 事先恢复好。
+- 为什么不让硬件自动保存：这样 trap 入口简单、延迟低；而且不同 OS 的栈布局（每核栈还是每进程栈）、需要保存哪些寄存器各不相同，硬件定死反而不灵活。代价是软件必须提供 trampoline。
+- trampoline 必须用汇编：刚进来时 `sp` 还是用户的，C 函数开头第一件事就是用 `sp` 压栈；所有通用寄存器也都属于用户，只能先借 `sscratch` 腾出一个寄存器。
 
-### 4.3 系统调用分发表和错误码
+### 4.2 处理系统调用时要对 sepc 做什么处理？为什么？时钟中断的处理需要对 sepc 做同样的处理吗？为什么？
 
-分发器采用显式 `switch`。优点是本轮只实现需要的调用时边界清晰，未知编号自然落入 `default`；代价是系统调用增多后不如函数指针表紧凑。所有未知或未实现编号统一返回 `-1`，`badecall` 用 90–99 验证不会越界或 panic。
+**结论：** 系统调用要 `sepc += 4`，因为 `sepc` 指向 ecall 自己，不加就会回去重复执行 ecall。时钟和 UART 中断不能加 4，因为异步中断发生在指令边界，`sepc` 本来就是下一条该执行的指令。
 
-参数来自当前进程 trapframe 的 `a0-a5`，调用号来自 `a7`，返回值写回 `a0`。分发器先保存 `caller`；因为 `exit` 和等待中的 `wait` 会切换当前进程，只有 `myproc() == caller` 时才向原调用者写返回值。
+- 不加 4 的现象：返回后又执行 ecall，陷入死循环，write 会反复输出同一串字符（`sh> sh> sh> ...`）。
+- 本实现只在 `cause == 8` 分支里加（`trap.c:87-88`），而且在调用 `syscall()` 之前加。这样即使 syscall 里发生了进程切换，trapframe 里保存的也已经是正确的恢复点。
+- 非法指令、访问越界也不能加 4：那等于跳过错误继续运行，会掩盖问题。本实现的做法是打印 `scause/sepc/stval` 后停机。
 
-> 💭 如果分发器在 `sys_exit()` 后无条件执行 `myproc()->trapframe->a0 = result`，此时 `myproc()` 已经是被唤醒的父进程，子进程的返回值会污染父进程的 wait 结果。保存调用者身份并在写回前核对，是进程切换路径的必要不变式。
+### 4.3 行缓冲与字符流两种语义，在中断处理和读取函数里各造成什么差别？如果只改一处会出什么问题？
 
-### 4.4 没有通用页分配器时如何 fork
+**结论：** 生产者的“通知条件”和消费者的“开始读条件”必须是同一个谓词。行缓冲的谓词是“有完整的一行”，字符流的谓词是“有任意一个字节”。
 
-本轮预留 8 个静态进程槽，每槽有独立 64 KiB 用户映像、trapframe、页表和 8 KiB 内核栈。`fork` 找到空槽后复制完整用户映像和 trapframe，子进程状态设为 RUNNABLE，父子内存立即独立，不存在共享写入。
+- 中断处理（生产者）：行缓冲只在收到 `\n` 时通知读者，字符流每收到一个字节都通知。本实现的 `console_intr` 始终维护 `lines`，这正是行缓冲的通知条件。
+- 读取函数（消费者）：`input_readable()` 按宏选择谓词（见 3.4 的表）。
+- 只改中断侧（每个字符都通知），读者却坚持等完整的一行：读者被频繁唤醒，检查后又睡回去，全是无效唤醒。
+- 只改读取侧（来一个字就返回），生产者却只在回车时才通知：字符已经在缓冲区里，读者却一直睡到回车，字符流退化成了行缓冲。
+- lab2 用 `wfi`，任何中断都会让读者重新检查条件，所以第一种错误只是白白消耗 CPU。到 lab4 改成 sleep/wakeup 以后，第二种错误会变成真正的“丢失唤醒”。
 
-Shell 随后调用 `wait`，当前最小状态机把父进程置为 WAITING 并切到其 RUNNABLE 子进程；子进程 `exec` 替换映像，`exit` 时恢复等待父进程并把 PID 写回父 trapframe。该方案足以支撑本轮 `sh → hi/spin`，但没有通用调度、公平性、僵尸链表或孤儿收养，Lab4 必须重构。
+## 5 增量包设计决策
 
-### 4.5 exec 与内嵌程序表
-
-构建系统生成的 `_uprog_table` 每项依次为 `u64 start`、`u64 end`、以 NUL 结束的名字，并按 8 字节对齐，最后由 `{0,0}` 结束。`proc_exec()` 去掉 Shell 输入中的换行，按名字遍历表，检查映像大小后清空当前 64 KiB 用户区并复制平铺二进制，将 `epc=0`、`sp=64 KiB-16`。
-
-用户栈从高地址向下增长，初始 `sp` 保持 16 字节对齐。Lab2 允许忽略 argv，所以当前 exec 只使用程序名；Lab5 再补全参数字符串复制和栈布局。
-
-### 4.6 用户指针如何处理
-
-虽然增量包允许直接映射阶段直接解引用，当前实现仍通过 `proc_copyin`、`proc_copyout` 和 `proc_copyinstr` 检查地址及长度是否落在本进程 64 KiB 用户区，再转换到对应物理存储。这样非法长度不会直接使内核越界。Lab3 后应改成逐页 walk，并检查 PTE 的有效位、用户位和读写权限。
-
-### 4.7 定时器兼容路径
-
-当前 QEMU CPU 不实现 Sstc，直接访问 `menvcfg` 会产生 cause 2 非法指令。`start()` 因此配置 CLINT M 态定时器；`timervec.S` 重装 `mtimecmp` 并置位 `sip.SSIP`；S 态 trap 将 cause 1 计为 tick 并清除 SSIP。`LAB2_TICK=3` 直接参与比较间隔计算。
-
-## 5 现场三题速答
-
-### 5.1 机理题
-
-ecall 只负责记录 `sepc/scause`、切到 S 态并跳到 `stvec`，不保存通用寄存器、不切栈；软件 trampoline 保存 trapframe、换内核栈和页表。sret 只根据 `SPP/SPIE/sepc` 恢复特权级、中断状态和 PC，通用寄存器已由 `userret` 先恢复。
-
-### 5.2 个性化题
-
-本人的 `LAB2_BUF_SIZE=64`、`LAB2_BUF_SEMANTICS=1`、`LAB2_TICK=3`。输入采用单调下标环形缓冲；满时丢普通字符但保留换行终止边界；单字节 read 按字符流立即返回。
-
-### 5.3 定位题
-
-若 write 反复输出同一串，先检查 ecall 分支是否把 `sepc` 加 4。若敲键盘无响应，按 UART IER → PLIC priority/enable → `sie.SEIE` → `sstatus.SIE` 顺序核对。若一进用户态 cause 1/2，检查 trampoline 映射、程序映像地址、`epc` 和用户栈对齐。
-
-## 6 高频追问与可能问题
-
-### 6.1 trap 与 trampoline
-
-**问：为什么 trapframe 字段顺序不能随便改？**
-
-答：汇编只认识固定数字偏移，例如 `sd a0,112(a0)`。字段漏失或顺序变化会使 C 与汇编把同一地址解释成不同寄存器，恢复现场立即损坏。
-
-**问：sscratch 在本实现中做什么？**
-
-答：刚进入 uservec 时所有通用寄存器都属于用户，汇编需要一个临时位置保存用户 `a0`，才能把 `a0` 改成 trapframe 基址。保存其他寄存器后再从 `sscratch` 取回原用户 `a0` 写入偏移 112。
-
-**问：为什么用户态和内核态要使用不同 stvec？**
-
-答：用户态 trap 必须先经过 uservec 保存用户现场并换栈；内核执行系统调用时若再次收到中断，已经位于可信内核栈，应进入 kernelvec 保存内核寄存器。若仍指向 uservec，会把内核现场误当作用户现场。
-
-**问：为什么 trampoline 在用户页表和内核页表中必须位于同一虚拟地址？**
-
-答：uservec/userret 会在执行过程中切换 `satp`。切换后的下一条取指仍使用当前 PC；只有两张页表把该虚拟页映射到同一物理代码页，执行流才能连续。
-
-**问：Makefile 为什么重命名目标文件的 trampsec？**
-
-答：Lab1 预置链接脚本只收纳 `.text/.text.*`，而预置 trampoline 使用独立 `trampsec`。不改两份只读源文件的前提下，构建时把目标段重命名为 `.text.trampoline`，使它进入可加载内核 text；否则链接器会把孤儿段放到地址 0，首次 userret 取指 cause 1。
-
-### 6.2 系统调用与进程
-
-**问：系统调用参数和返回值分别在哪里？**
-
-答：调用号在 `a7`，前三个参数在 `a0-a2`，返回值写回 trapframe 的 `a0`。当前解包函数也支持读取到 `a5`。
-
-**问：为什么未知调用不能直接索引函数表？**
-
-答：未验证编号可能越界读取函数指针并跳到随机地址。无论 switch 还是表驱动，都必须先检查范围和空项；当前 default 返回 `-1`。
-
-**问：fork 后父子分别看到什么返回值？**
-
-答：父进程 syscall 返回新 PID；复制 trapframe 后显式把子进程 `a0` 设为 0，所以子进程从同一 fork 返回点继续时看到 0。
-
-**问：为什么 spin 运行后 Shell 不能继续执行下一条命令？**
-
-答：Shell fork 后立即 wait，而 spin 不 exit；Lab2 只要求忙程序运行时中断仍可响应，不要求并发交互式作业控制。通用抢占调度和可运行队列属于 Lab4。
-
-**问：当前实现支持 22 个系统调用吗？**
-
-答：接口号 1–22 都由预置文件定义，但本轮只实现 Shell 和测试所需的 fork、exit、wait、read、exec、getpid、pause、uptime、write；其余确定返回 `-1`，不谎称已具备文件系统能力。
-
-### 6.3 控制台与中断
-
-**问：环形缓冲为什么用单调递增下标而不是每次手动回绕？**
-
-答：`write-read` 直接表达元素数，空是相等，满是差值等于容量；实际数组访问再取模。无符号回绕下差值在容量远小于计数范围时仍成立。
-
-**问：缓冲满时为什么不在中断处理里等待？**
-
-答：中断处理不能等待消费者，否则消费者只有等中断返回后才可能运行，会形成死锁。本轮丢弃溢出字符，并保留换行作为恢复边界。
-
-**问：PLIC claim 后为什么必须 complete？**
-
-答：claim 取得并占有当前最高优先级 IRQ；处理后把同一编号写回 claim/complete 寄存器，PLIC 才会结束该次服务并允许后续同源中断。
-
-**问：为什么 console_read 等待时可以打开中断？**
-
-答：它已经把 `stvec` 切到 kernelvec，并运行在可信内核栈；打开 SIE 后 UART 中断可入队字符，kernelvec 恢复后 `wfi` 返回，读取循环重新检查条件。
-
-### 6.4 装载与地址空间
-
-**问：加载地址如何避免覆盖内核？**
-
-答：用户映像不复制到 `kernel_end` 后任意裸地址，而是复制到每进程预留的独立物理数组，再由用户页表映射到虚拟地址 0，所以不会覆盖内核 text/data/bss。
-
-**问：为什么用户入口 epc 是 0？**
-
-答：预置 `user.ld` 把平铺程序从虚拟地址 0 链接，用户页表也把映像第一页映射到 VA 0；程序入口为 main，所以首次 sret 的 `sepc` 设为 0。
-
-**问：为什么用户栈顶减 16？**
-
-答：用户空间高端留给向下增长的栈，减 16 后仍满足 RISC-V ABI 的 16 字节对齐，并避免把初值放在映射边界之外。
-
-## 7 故障现象与日志定位
-
-| 症状 | 第一问题 | 重点检查 |
+| 问题 | 本实现的做法 | 取舍 |
 | --- | --- | --- |
-| write 反复输出同一串 | 返回 PC 是否仍是 ecall | `sepc += 4` 是否只在 cause 8 分支 |
-| 非法系统调用使内核崩溃 | default 去哪里、a0 写了什么 | 编号范围、统一 `-1` |
-| 一进用户态 cause 1/2 | epc 和映射是否一致 | trampoline 物理页、程序 VA 0、用户栈 |
-| 敲键盘无回显 | 中断使能链哪一环断了 | IER → PLIC → SEIE → SIE |
-| 输入乱码或丢失 | 环形缓冲下标是否满足不变式 | 满/空条件、取模位置、中断保护 |
-| 超长行后永久等待 | 换行是否随溢出数据被丢弃 | 满缓冲的记录边界恢复 |
-| 启动在 `0x80000070` cause 2 | QEMU 是否支持 Sstc | 不访问 `menvcfg/stimecmp`，走 M timer 桥接 |
-| userret 在高地址 cause 1 | trampoline 是否进入可加载段 | ELF section、页表 PTE_X、虚实地址偏移 |
-| `spin` 时键盘完全无反应 | 用户态中断是否打开 | `SPIE`、SEIE、PLIC complete |
+| trapframe 的存储位置与大小？每进程还是全局？谁在何时切换？ | 每进程一页 `trapframe_pages[8]`，所有用户页表都映射到同一个虚拟地址 TRAPFRAME。`usertrapret` 填头部，uservec 保存寄存器。fork 复制整个 trapframe 后把子进程 `a0` 改成 0 | 每进程独立，fork/wait 切换时不需要额外保存寄存器 |
+| 输入缓冲结构与锁？“检查状态-等待”如何实现？两种语义体现在哪几行？ | 单调下标环形缓冲 + `lines` 计数；单核关中断，不用锁；等待用 `intr_on; wfi; intr_off` 循环；语义区别在 `console.c:138-146 input_readable()` | 实现最简单；lab4 必须换成睡眠队列 |
+| 分发表形式与错误码？ | `switch`，`default` 返回 −1；写回前核对调用者 | 系统调用少时边界清楚；调用多了以后可以改成带范围检查的函数表 |
+| 没有页分配器时 fork 怎么复制？复制到哪、谁记账？ | 复制到空闲槽的静态 64 KiB 数组；`struct proc` 的 `state/parent_pid` 记账 | 立即完整复制，没有 COW；最多 8 个进程 |
+| 用户指针能否直接解引用？ | 没有直接解引用：`proc_copyin/copyout/copyinstr` 检查“地址 + 长度”不超出 64 KiB | lab3 要改成逐页 walk，并检查 PTE_U / PTE_W |
 
-无 gdb 定位顺序：
+## 6 与任务书不同的地方
+
+1. **开了最小 SV39 页表，而不是 `satp=0`。** 预置 `trampoline.S` 固定访问高地址 TRAMPOLINE/TRAPFRAME，`user.ld` 又把程序链接在地址 0，这两个地址都不是物理 RAM。`vm_init`（`proc.c:116`）给内核建两个 1 GiB 大页做恒等映射，再加 trampoline；`setup_user_pagetable`（`proc.c:81`）为每个进程映射 VA 0 起的 64 KiB、trampoline 和 trapframe。这不是 lab3 的通用分配器。
+2. **程序没有加载到 `end` 之后。** 程序复制到内核 bss 里的 `user_memory[slot]`，再映射到 VA 0。这块内存由链接器分配，同样不会覆盖内核。
+3. **时钟走 M 态桥接**，S 态看到的是 cause 1，不是 cause 5（见 3.5）。
+4. **fork 之后子进程不会立刻运行**，父进程调用 wait 时才切过去。这是最小的执行流切换，不是调度器。
+5. **构建时重命名 trampoline 所在的段。** 预置 `trampoline.S` 使用 `trampsec` 段，而预置链接脚本只收 `.text/.text.*`。Makefile 用 `objcopy --rename-section` 把它改名为 `.text.trampoline`，两个预置文件都没有改动。
+
+## 7 高频追问
+
+**问：`sscratch` 在这里起什么作用？**
+刚进 uservec 时，所有寄存器都是用户的。先把用户 a0 存进 `sscratch`，腾出 a0 装 TRAPFRAME 地址；其余寄存器都存完后，再把原来的 a0 取回来，写到偏移 112。
+
+**问：为什么用户态和内核态的 `stvec` 不一样？**
+用户态 trap 要走 uservec：换栈、换页表、保存进 trapframe。内核态 trap（例如 console_read 等待时来了中断）已经在可信的内核栈上，走 kernelvec 在当前栈上压 256 字节即可。如果内核态也用 uservec，内核现场会被当成用户现场写进 trapframe。
+
+**问：trampoline 为什么要在两张页表里映射到同一个虚拟地址？**
+uservec/userret 执行到一半会切换 `satp`，下一条指令仍然按当前 PC 取指。两张页表对这一页的映射必须相同，执行流才能接得上。
+
+**问：fork 之后父子进程分别拿到什么？谁先运行？**
+父进程拿到子进程 pid，子进程拿到 0。父进程先继续运行，调用 wait 时才切到子进程。子进程 exit 后，父进程从 wait 返回子进程 pid。sh 的 pid 是 1，第一个子进程是 2。
+
+**问：为什么 spin 运行时 Shell 不能输入下一条命令？**
+sh 正在 wait，而 spin 永远不 exit。lab2 只要求 spin 期间中断仍能响应（敲键盘有回显），并发运行多个进程是 lab4 的事。
+
+**问：未知调用号为什么不会让内核崩？用函数表要注意什么？**
+`default` 返回 −1。如果用函数表，必须先检查编号范围和表项是否为空，否则 `table[99]` 会越界读出一个随机指针并跳过去。T2-3 专门测了 0、23、−1 这几个紧贴合法范围边界的编号。
+
+**问：缓冲区满时为什么不在中断里等？**
+消费者要等中断返回后才有机会运行，中断里等待就是死锁。所以只能丢弃。
+
+**问：PLIC claim 之后为什么必须 complete？**
+claim 会占住这个中断源，把同一个编号写回 complete 后，PLIC 才会放行它的下一次中断。忘了 complete，第一次按键之后就再也收不到中断。
+
+**问：bufstorm 的 bytes 为什么每次不一样？**
+取决于读者能不能边收边取。第一行 100 个 x 如果把 64 字节缓冲区填满，就是 63 个 x + 换行，再加 two/three/four 三行共 15 字节，总共 79；如果读者来得及取走，一个都不丢，就是 116。官方说明写明，超长行丢字符属于预期行为。
+
+**问：lab2 改了 start.c，会影响 lab1 吗？**
+只加了定时器配置，PMP、MPP、mepc 这条主线没变。Banner 回归（前 3 行逐字节一致）和 lab1 自测 23 项都通过。
+
+**问：后面哪些地方要重构？**
+lab3：用户指针检查改成逐页 walk，静态页表改成通用分配器。lab4：`wfi` 等待改成 sleep/wakeup，wait/exit 的直接切换改成真正的调度器，`input_readable()` 变成 wakeup 条件。lab5：在 usertrap 里加缺页分支（cause 12/13/15），exec 支持 argv，按 ELF 入口启动。lab6：`_uprog_table` 换成文件系统。
+
+## 8 故障现象与日志定位
 
 ~~~bash
-qemu-system-riscv64 -machine virt -bios none \
-  -kernel kernel/kernel -nographic -d int -D int.log
-
-grep 'async:0' int.log | head
+qemu-system-riscv64 -machine virt -bios none -kernel kernel/kernel -nographic -d int -D int.log
+grep 'async:0' int.log | grep -v 'cause:0000000000000008' | head      # 排除正常的 ecall
 riscv64-unknown-elf-addr2line -e kernel/kernel <epc>
 ~~~
 
-Lab2 的正常 U 态 ecall 也显示为 `async:0 cause=8`，所以“零同步异常”必须解释为排除 cause 8 后为 0；不能把正常系统调用误判为故障。
+| 症状 | 首先该问的问题 | 检查位置 |
+| --- | --- | --- |
+| write 后反复输出同一串 | 返回后 PC 是否还停在 ecall | `trap.c:88` 的 `epc += 4` |
+| 非法调用号让内核崩了 | default 去哪了，返回值放在哪 | `syscall.c:131`、`:136` |
+| 一进用户态就 cause 1/2 | epc、映射、栈对不对 | `epc=0`、用户页表 VA 0 带 PTE_U、trampoline 页 |
+| exec 之后程序卡住、没有 ecall | 地址 0 是不是 `main` | 自测 A1；`riscv64-unknown-elf-nm -n user-flat/x.elf` |
+| 敲键盘没有回显 | 中断使能链路哪一环断了 | IER → PLIC 优先级/使能/阈值 → `sie.SEIE` → `SIE/SPIE` → complete |
+| 输入乱码或丢字 | 下标和空满判断对不对 | 取模位置；空满条件是否写反；访问下标时是否关了中断 |
+| 超长行之后永远卡住 | 换行是否也被丢了 | `console_intr` 满缓冲分支 |
+| 启动时 cause 2 | 是否访问了不支持的 CSR | 不要用 `stimecmp/menvcfg`，走 M 态桥接 |
+| userret 在高地址 cause 1 | trampoline 是否在可加载段里 | Makefile 的段重命名；PTE_X |
