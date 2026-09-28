@@ -38,6 +38,14 @@ main(void)
   console_checksum_pause();
 #endif
 
+#ifdef LAB1_PRINTF_EXTRA_TEST
+  /* Built only by tests/lab1_selftest.py; the default banner is unchanged. */
+  printf("extra ptr=%p chr=%c pct=%% lmin=%ld lmax=%lu null=%s "
+         "hexzero=%x neg1=%d unknown=%q\n",
+         (void *)0x80000000UL, 'Z', (-9223372036854775807L - 1),
+         0xffffffffffffffffUL, (char *)0, 0U, -1);
+#endif
+
   for (;;)
     asm volatile("wfi");
 }

@@ -32,3 +32,7 @@ lab1 已实现以下内容:
   kernel/types.h
   kernel/memlayout.h
   kernel/course_sid.h
+
+自测用例:
+
+  python3 tests/lab1_selftest.py   # printf 边界 + 协议格式边界
