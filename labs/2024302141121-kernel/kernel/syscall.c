@@ -31,6 +31,7 @@ sys_write(void)
 
   if ((descriptor != 1 && descriptor != 2) || requested < 0)
     return -1;
+  if (proc_validate(address, (uint64)requested, PTE_R) < 0) return -1;
   while (written < requested) {
     int chunk = requested - written;
     int index;
@@ -60,7 +61,9 @@ sys_read(void)
     return 0;
   if (requested > (int)sizeof(buffer))
     requested = sizeof(buffer);
-  received = console_read(buffer, requested);
+  if (proc_validate(address, (uint64)requested, PTE_W) < 0) return -1;
+  received = console_try_read(buffer, requested);
+  if (received == -2) { proc_defer(PROC_INPUT); return 0; }
   if (received < 0 || proc_copyout(address, buffer, received) < 0)
     return -1;
   return received;
@@ -79,16 +82,15 @@ static int
 sys_pause(void)
 {
   int duration = (int)argraw(0);
-  uint64 target;
-
-  if (duration < 0)
-    return -1;
-  target = ticks_read() + (uint64)duration;
-  while (ticks_read() < target) {
-    intr_on();
-    asm volatile("wfi");
-    intr_off();
+  struct proc *p = myproc();
+  if (duration < 0) return -1;
+  if (!duration) return 0;
+  if (!p->sleep_until) p->sleep_until = ticks_read() + (uint64)duration;
+  if (ticks_read() < p->sleep_until) {
+    proc_defer(PROC_SLEEP);
+    return 0;
   }
+  p->sleep_until = 0;
   return 0;
 }
 
@@ -97,7 +99,8 @@ syscall(void)
 {
   struct proc *caller = myproc();
   int number = (int)caller->trapframe->a7;
-  int result;
+  uint64 dispatched_epc = caller->trapframe->epc;
+  uint64 result;
 
   switch (number) {
   case SYS_fork:
@@ -108,13 +111,18 @@ syscall(void)
     result = 0;
     break;
   case SYS_wait:
-    result = proc_wait();
+    result = proc_wait(argraw(0));
     break;
   case SYS_read:
     result = sys_read();
     break;
   case SYS_exec:
     result = sys_exec();
+    break;
+  case SYS_sbrk:
+    /* Both strategy values are eager until lab5. Reject unknown policies. */
+    result = (argraw(1) == 1 || argraw(1) == 2) ?
+             proc_sbrk((int)argraw(0)) : (uint64)-1;
     break;
   case SYS_getpid:
     result = caller->pid;
@@ -133,6 +141,7 @@ syscall(void)
     break;
   }
 
-  if (myproc() == caller && caller->state == PROC_RUNNING)
-    caller->trapframe->a0 = (uint64)result;
+  if (myproc() == caller && caller->state == PROC_RUNNING &&
+      caller->trapframe->epc == dispatched_epc)
+    caller->trapframe->a0 = result;
 }

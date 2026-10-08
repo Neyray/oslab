@@ -44,6 +44,7 @@ device_interrupt(uint64 cause)
   if (code == IRQ_S_SOFTWARE) {
     w_sip(r_sip() & ~2UL);
     ticks++;
+    proc_wake_ticks(ticks);
     return 1;
   }
   if (code == IRQ_S_EXTERNAL) {
@@ -78,10 +79,9 @@ ticks_read(void)
 void
 usertrap(void)
 {
+  w_stvec((uint64)kernelvec);
   struct proc *process = myproc();
   uint64 cause = r_scause();
-
-  w_stvec((uint64)kernelvec);
   process->trapframe->epc = r_sepc();
 
   if (cause == 8) {
@@ -90,8 +90,9 @@ usertrap(void)
   } else if (!device_interrupt(cause)) {
     printf("user trap: scause=%p sepc=%p stval=%p\n", (void *)cause,
            (void *)r_sepc(), (void *)r_stval());
-    for (;;)
-      asm volatile("wfi");
+    proc_exit(-1);
+  } else if ((cause & SCAUSE_CODE_MASK) == IRQ_S_SOFTWARE) {
+    proc_yield();
   }
 
   usertrapret();

@@ -4,7 +4,6 @@
 #include "types.h"
 
 #define LAB2_NPROC 8
-#define LAB2_USER_SIZE (64 * 1024UL)
 #define LAB2_KSTACK_SIZE (8 * 1024UL)
 
 struct trapframe {
@@ -46,7 +45,7 @@ struct trapframe {
   uint64 t6;
 };
 
-enum procstate { PROC_UNUSED, PROC_RUNNABLE, PROC_RUNNING, PROC_WAITING };
+enum procstate { PROC_UNUSED, PROC_RUNNABLE, PROC_RUNNING, PROC_WAITING, PROC_ZOMBIE, PROC_INPUT, PROC_SLEEP };
 
 struct proc {
   int pid;
@@ -54,10 +53,15 @@ struct proc {
   enum procstate state;
   int exit_status;
   struct trapframe *trapframe;
-  uint8 *memory;
   uint64 *pagetable;
   uint64 user_satp;
   uint64 kernel_stack_top;
+  uint64 sz;
+  uint64 heap_base;
+  uint64 guard_start;
+  uint64 stack_base;
+  uint64 wait_status_address;
+  uint64 sleep_until;
 };
 
 void vm_init(void);
@@ -66,7 +70,14 @@ void proc_init(void);
 struct proc *myproc(void);
 int proc_fork(void);
 int proc_exec(const char *name);
-int proc_wait(void);
+int proc_wait(uint64);
+uint64 proc_sbrk(int);
+void proc_yield(void);
+void proc_defer(enum procstate);
+void proc_wake_input(void);
+void proc_wake_ticks(uint64);
+int proc_validate(uint64, uint64, int);
+void proc_dump_current(void);
 void proc_exit(int status);
 int proc_copyin(void *dst, uint64 src, uint64 length);
 int proc_copyout(uint64 dst, const void *src, uint64 length);

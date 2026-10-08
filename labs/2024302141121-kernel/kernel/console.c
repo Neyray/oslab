@@ -2,6 +2,7 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "course_sid.h"
+#include "proc.h"
 
 #define UART_THR 0
 #define UART_IER 1
@@ -106,6 +107,11 @@ console_intr(void)
     if ((*uart_reg(UART_LSR) & UART_LSR_DR) == 0)
       break;
     byte = *uart_reg(UART_THR);
+    if (byte == 0x10) {
+      console_putc('\n');
+      proc_dump_current();
+      continue;
+    }
     if (byte == '\r')
       byte = '\n';
 
@@ -123,6 +129,8 @@ console_intr(void)
         *last = byte;
       }
     }
+
+    proc_wake_input();
 
     /* Echo is part of the console contract even if the ring is full. */
     console_putc(byte);
@@ -187,6 +195,24 @@ console_read(void *destination, int length)
 
   if (interrupts_were_enabled)
     intr_on();
+  return count;
+}
+
+/* A blocked syscall restarts its ecall instead of retaining a C stack. */
+int
+console_try_read(void *destination, int length)
+{
+  uint8 *output = destination;
+  uint64 available_bytes = input.write_index - input.read_index;
+  int count = 0;
+  if (length <= 0) return 0;
+  if (!input_readable() ||
+      (length > 1 && !input.lines && available_bytes < (uint64)length)) return -2;
+  while (count < length && input.read_index != input.write_index) {
+    uint8 byte = input.data[input.read_index++ % LAB2_BUF_SIZE];
+    output[count++] = byte;
+    if (byte == '\n') { input.lines--; break; }
+  }
   return count;
 }
 

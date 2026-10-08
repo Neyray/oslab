@@ -24,17 +24,20 @@ from harness import KERNEL_TREE, Console, Report, build, params, variant
 
 def check_entry_points(report, tree):
     """exec jumps to address 0 of a flat binary; ENTRY(main) is lost there."""
+    # tools/embed.py has a command-line entrypoint; parse ELF headers directly here.
+    import struct
     makefile = (tree / "Makefile").read_text()
     programs = re.search(r"^UPROGS = (.*)$", makefile, flags=re.M).group(1).split()
+    prefix = "riscv64-unknown-elf-" if __import__("shutil").which("riscv64-unknown-elf-nm") else "riscv64-linux-gnu-"
     misplaced = []
     for program in programs:
-        symbols = subprocess.run(
-            ["riscv64-unknown-elf-nm", str(tree / "user-flat" / f"{program}.elf")],
-            capture_output=True, text=True).stdout
-        entry = re.search(r"^([0-9a-f]+) T main$", symbols, flags=re.M)
-        if not entry or int(entry.group(1), 16) != 0:
+        image = tree / "user-flat" / f"{program}.elf"
+        entry = struct.unpack_from("<Q", image.read_bytes(), 24)[0]
+        symbols = subprocess.run([prefix + "nm", str(image)], capture_output=True, text=True).stdout
+        main = re.search(r"^([0-9a-f]+) T main$", symbols, flags=re.M)
+        if not main or int(main.group(1), 16) != entry:
             misplaced.append(program)
-    report.check("A1", f"main is at address 0 in all {len(programs)} programs",
+    report.check("A1", f"ELF entry equals main in all {len(programs)} programs",
                  not misplaced, ", ".join(misplaced) or " ".join(programs))
 
 

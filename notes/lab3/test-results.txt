@@ -1,0 +1,78 @@
+2026-10-08 lab3 final verification; single hart; course unknown-elf toolchain
+
+$ python3 tests/lab1_selftest.py
+lab1 self-tests on /home/jerico/projects/oslab/labs/2024302141121-kernel (sid=2024302141121, protocol=2)
+[PASS] T1-1a %d of 0 prints a single digit  (got b'0')
+[PASS] T1-1b %d of INT_MIN (negative, no overflow)  (got b'-2147483648')
+[PASS] T1-1c %d of INT_MAX  (got b'2147483647')
+[PASS] T1-1d %s of an empty string prints nothing  (got b"''")
+[PASS] T1-1e %x of UINT_MAX: lowercase, 0x, no leading zero  (got b'0xffffffff')
+[PASS] T1-1f %s of an 80-byte string is complete  (got b'01234567890123456789012345678901234567890123456789012345678901234567890123456789')
+[PASS] T1-1g %d of -1  (got b'-1')
+[PASS] T1-1h %x of 0 still prints one digit  (got b'0x0')
+[PASS] T1-1i %ld of LONG_MIN  (got b'-9223372036854775808')
+[PASS] T1-1j %lu of ULONG_MAX  (got b'18446744073709551615')
+[PASS] T1-1k %s of a NULL pointer does not fault  (got b'(null)')
+[PASS] T1-1l %p prints 0x plus lowercase hex  (got b'0x80000000')
+[PASS] T1-1m %c  (got b'Z')
+[PASS] T1-1n %% prints one percent sign  (got b'%')
+[PASS] T1-1o an unknown conversion is echoed, not dropped  (got b'%q')
+[PASS] T1-2a line 1 has decimal sid and lowercase 0x mod97  (OSLAB1 sid=2024302141121 mod97=0x23)
+[PASS] T1-2b [chk=N] equals the host-side byte sum of the body  (host=12536 kernel=[chk=12536])
+[PASS] T1-2c the checksum line is the last banner line and ends in \n
+[PASS] T1-2d banner equals expect_banner.txt byte for byte  (205 bytes)
+[PASS] T1-2e protocol 0 build: same body, no checksum line
+[PASS] T1-2f protocol 1 build: '.' after every byte, newline included  (386 bytes)
+[PASS] A1 two cold boots print identical bytes
+[PASS] A2 -d int shows no synchronous fault during boot  (0 faults)
+== 23 passed, 0 failed
+exit=0
+
+$ python3 tests/lab2_selftest.py
+lab2 self-tests (buffer=64, semantics=1)
+[PASS] T2-1 read(0, buf, 64) of a 64-byte line returns 64; overlong line keeps its newline; buffer recovers  (READCAP PASS overlong_total=64 overlong_calls=1)
+[PASS] T2-1 alive shell prompt returns after overflow
+[PASS] T2-2a empty buffer: read blocks instead of returning 0/-1
+[PASS] T2-2b stream mode (1): one key wakes the reader before Enter
+[PASS] T2-2 alive shell prompt returns
+[PASS] T2-3 syscall 0 / 23 / -1 / unimplemented return -1; bad fd, length, pointer, exec, wait rejected  (SYSERR PASS failures=0)
+[PASS] T2-3 alive kernel still runs programs afterwards
+[PASS] A1 ELF entry equals main in all 15 programs  (sh hi spin badecall bufstorm readcap readempty syserr badaccess memcap vmtest guardtest schedtest oomtest concurrent)
+[PASS] A2 (semantics=0) T2-1 read(0, buf, 64) of a 64-byte line returns 64; overlong line keeps its newline; buffer recovers  (READCAP PASS overlong_total=64 overlong_calls=1)
+[PASS] A2 (semantics=0) T2-1 alive shell prompt returns after overflow
+[PASS] A2 (semantics=0) T2-2a empty buffer: read blocks instead of returning 0/-1
+[PASS] A2 (semantics=0) T2-2b line mode (0): the reader wakes only after Enter
+[PASS] A2 (semantics=0) T2-2 alive shell prompt returns
+== 13 passed, 0 failed
+exit=0
+
+$ python3 tests/lab3_selftest.py --all-orders
+lab3 self-tests: official + boundary + rollback + regression
+[PASS] boot Shell starts
+[PASS] lab1 banner is byte-identical
+[PASS] dump ABI code/data/guard/stack/trapframe/trampoline permissions
+[PASS] badaccess TEST-3a PASS  (TEST-3a PASS)
+[PASS] badaccess alive shell returns
+[PASS] badaccess 3b beyond-sbrk process is killed
+[PASS] guardtest GUARDTEST PASS pages=\d+ failures=0  (GUARDTEST PASS pages=2 failures=0)
+[PASS] guardtest alive shell returns
+[PASS] cross-page write and read across nonadjacent physical pages
+[PASS] cross-page alive shell returns
+[PASS] schedtest SCHEDTEST PASS  (SCHEDTEST PASS)
+[PASS] schedtest alive shell returns
+[PASS] timer preemption child runs before parent waits
+[PASS] memcap TEST-4 PASS: OOM returned error after \d+ chunks;  (TEST-4 PASS: OOM returned error after 2036 chunks;)
+[PASS] memcap alive shell returns
+[PASS] oomtest OOMTEST PASS bytes=\d+\n  (OOMTEST PASS bytes=133443584
+)
+[PASS] oomtest alive shell returns
+[PASS] conservation no user page/table/trapframe leak after all programs  (32650 -> 32650; replay begins at line start)
+[PASS] spin + sh supplied spin progresses while supplied sh accepts hi
+[PASS] lab2 smoke official UART regression  (boot ok; EXPECT 'hi: user program running, pid=[0-9]+': PASS; EXPECT 'TEST-1 PASS': PASS; log → /tmp/lab3-smoke.log;EXPECT 失败 0 条)
+[PASS] lab2 bufstorm official UART regression  (boot ok; EXPECT 'BUFSTORM lines=4': PASS; log → /tmp/lab3-bufstorm.log;EXPECT 失败 0 条)
+[PASS] normal traps only ecall synchronous exceptions in hi/badecall  (0 unexpected faults)
+[PASS] MM order=0 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+[PASS] MM order=1 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+[PASS] MM order=2 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+== 25 passed, 0 failed
+exit=0
