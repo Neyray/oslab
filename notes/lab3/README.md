@@ -6,7 +6,6 @@
 | --- | --- |
 | [design.md](design.md) | 参数、控制流、3 道原题、分配器与回滚取舍、现场短答、追问、故障定位 |
 | [test-plan.md](test-plan.md) | 可复制的验收命令；官方、边界、OOM、回归测试与实测结果 |
-| [test-design.md](test-design.md) | 核心实现前确定的边界与错误路径断言 |
 | [实验说明书 V3.1](../../docs/lab3-实验说明书-V3.1.md) | 最新任务书的文本转换，原件保留在 materials |
 | [tests/lab3_selftest.py](../../labs/2024302141121-kernel/tests/lab3_selftest.py) | 一次执行官方测试、UART 回归、用户边界测试与临时内核压力测试 |
 

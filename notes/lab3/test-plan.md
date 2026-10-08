@@ -1,6 +1,6 @@
 # lab3 指令验收清单
 
-对应 lab3 实验说明书 V3.1 第 4 节“交付与验收”，使用增量包 v2-20260929。所有命令在 WSL 中执行，内核树为 `~/projects/oslab/labs/2024302141121-kernel`。“实测”记录 2026-10-08 的真实运行；完整断言输出见 [test-results.txt](test-results.txt)。
+对应 lab3 实验说明书 V3.1 第 4 节“交付与验收”，使用增量包 v2-20260929。所有命令在 WSL 中执行，内核树为 `~/projects/oslab/labs/2024302141121-kernel`。“实测”记录 2026-10-08 的真实运行；测试判据与实测结果统一记录在本文。
 
 | 任务书要求 | 本文位置 |
 | --- | --- |
@@ -96,6 +96,22 @@ python3 tests/lab3_selftest.py --skip-mm
 | trapframe | `va=0x3fffffe000 ... perm=rw--` | 通过 |
 | trampoline | `va=0x3ffffff000 ... perm=r-x-` | 通过 |
 
+本次启动的实际 dump 示例（PA 随镜像大小与分配状态变化）：
+
+~~~text
+DUMP-PAGETABLE begin
+L2 va=0x0 pa=0x84039000 perm=----
+L1 va=0x0 pa=0x83fe7000 perm=----
+LEAF va=0x0 pa=0x83fe8000 perm=r-xu
+LEAF va=0x1000 pa=0x8403a000 perm=rw-u
+LEAF va=0x4000 pa=0x83fe6000 perm=rw-u
+L2 va=0x3fc0000000 pa=0x83fe9000 perm=----
+L1 va=0x3fffe00000 pa=0x84038000 perm=----
+LEAF va=0x3fffffe000 pa=0x84035000 perm=rw--
+LEAF va=0x3ffffff000 pa=0x80003000 perm=r-x-
+DUMP-PAGETABLE end
+~~~
+
 A/D 不放进 perm：本实现软件预置 A，W 页预置 D。应翻出 lab0 图纸，注明当前 guard 不分配物理页、内核栈采用静态恒等映射，与参考树快照的不同。图纸本人复核与手绘为**待本人完成**，没有用自动测试冒充已完成。
 
 ### 1.5 官方用户态测试
@@ -188,7 +204,7 @@ grep -nE 'argraw|proc_copy|proc_validate|copyout' kernel/syscall.c kernel/proc.c
 
 ## 2 自测用例
 
-任务书要求编码前设计两组自测：“保护页异常安全终止进程”“跨越物理页边界的受控拷贝”。[test-design.md](test-design.md) 在核心实现前建立，随后扩充 OOM 和映射事务用例；以下脚本统一运行：
+任务书要求编码前设计两组自测：“保护页异常安全终止进程”“跨越物理页边界的受控拷贝”。两组断言在核心实现前确定，随后扩充 OOM 和映射事务用例，统一整理在本节；以下脚本统一运行：
 
 ~~~bash
 cd ~/projects/oslab/labs/2024302141121-kernel
