@@ -11,6 +11,9 @@ OBJS = kernel/entry.o kernel/start.o kernel/console.o kernel/printf.o \
        kernel/timervec.o kernel/trampoline.o kernel/userimg.o kernel/main.o
 
 UPROGS = sh hi spin badecall bufstorm readcap readempty syserr badaccess memcap vmtest guardtest schedtest oomtest concurrent
+UPROGS += bench lottery_test stride_test
+
+UCOMMON = $(if $(wildcard user/common.c),user-flat/common.o)
 
 OBJCOPY = $(TOOLPREFIX)objcopy
 
@@ -51,9 +54,13 @@ user-flat/usys.o: user/usys.S kernel/syscall.h
 	mkdir -p user-flat
 	$(CC) $(UFLAGS) -Iuser -c $< -o $@
 
-user-flat/%.bin: user/%.c user/user.h $(wildcard kernel/*.h) user-flat/user.ld user-flat/ulib.o user-flat/printf.o user-flat/usys.o
+user-flat/common.o: user/common.c user/common.h user/user.h
+	mkdir -p user-flat
+	$(CC) $(UFLAGS) -Iuser -c $< -o $@
+
+user-flat/%.bin: user/%.c user/user.h $(wildcard kernel/*.h) user-flat/user.ld user-flat/ulib.o user-flat/printf.o user-flat/usys.o $(UCOMMON)
 	$(CC) $(UFLAGS) -Iuser -c $< -o user-flat/$*.o
-	$(LD) -T user-flat/user.ld -o user-flat/$*.elf user-flat/$*.o user-flat/ulib.o user-flat/printf.o user-flat/usys.o
+	$(LD) -T user-flat/user.ld -o user-flat/$*.elf user-flat/$*.o user-flat/ulib.o user-flat/printf.o user-flat/usys.o $(UCOMMON)
 	$(OBJCOPY) -O binary user-flat/$*.elf $@
 
 kernel/userimg.S: Makefile tools/embed.py $(addprefix user-flat/,$(UPROGS:=.bin))
