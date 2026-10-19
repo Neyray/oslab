@@ -1,0 +1,48 @@
+lab4: official bench + assigned MLFQ + boundary/recovery + regressions
+[PASS] preset user/user.h byte-identical to official v2
+[PASS] preset user/usys.pl byte-identical to official v2
+[PASS] preset kernel/swtch.S byte-identical to official v2
+[PASS] preset kernel/syscall.h byte-identical to official v2
+[PASS] official support/tests/bench.c byte-identical
+[PASS] official user/bench.c byte-identical
+[PASS] official support/tests/stride_test.c byte-identical
+[PASS] official user/stride_test.c byte-identical
+[PASS] official support/tests/README-tests.md byte-identical
+[PASS] official support/tests/lottery_test.c byte-identical
+[PASS] official user/lottery_test.c byte-identical
+[PASS] official support/tests/common.h byte-identical
+[PASS] official user/common.h byte-identical
+[PASS] official support/tests/common.c byte-identical
+[PASS] official user/common.c byte-identical
+[PASS] historical preset kernel/kernel.ld unchanged since lab3-submit
+[PASS] historical preset kernel/riscv.h unchanged since lab3-submit
+[PASS] historical preset kernel/types.h unchanged since lab3-submit
+[PASS] historical preset kernel/memlayout.h unchanged since lab3-submit
+[PASS] historical preset kernel/course_sid.h unchanged since lab3-submit
+[PASS] historical preset kernel/trampoline.S unchanged since lab3-submit
+[PASS] historical preset user/user.ld unchanged since lab3-submit
+[PASS] historical preset user/printf.c unchanged since lab3-submit
+[PASS] historical preset user/ulib.c unchanged since lab3-submit
+[PASS] historical preset user/sh.c unchanged since lab3-submit
+[PASS] historical preset user/hi.c unchanged since lab3-submit
+[PASS] historical preset user/spin.c unchanged since lab3-submit
+[PASS] boot shell starts
+[PASS] bench PASS: bench  (PASS: bench)
+[PASS] bench concurrency 0 all eight exit statuses recovered
+[PASS] bench PASS: bench  (PASS: bench)
+[PASS] bench concurrency 1 all eight exit statuses recovered
+[PASS] bench PASS: bench  (PASS: bench)
+[PASS] bench concurrency 2 all eight exit statuses recovered
+[PASS] schedabi SCHEDABI PASS  (SCHEDABI PASS)
+[PASS] MLFQ tiers 1/2/4 ticks and progress for every CPU worker  (RESULT mlfq_slices = 7 workers = 64:64:64
+)
+[PASS] MLFQ interactive interactive level 0; wake <=5 ticks; background advances
+[PASS] alt alt done  (alt done)
+[PASS] preemption A/B interleave, 16 chars each  (AAAAAAAAAAABBBBBBBBBBBBBBBBAAAAA)
+[PASS] recovery same free-page count after all operations  (32527 -> 32527)
+[PASS] invariants no panic or kernel trap
+[PASS] bench PASS: bench  (PASS: bench)
+[PASS] alt alt done  (alt done)
+[PASS] RR preemption both workers interleave
+[PASS] lost wakeup faulty wait sleeps with a zombie child
+== 45 passed, 0 failed

@@ -8,7 +8,6 @@ void console_putc(int c);
 void console_enable_interrupts(void);
 void console_intr(void);
 int console_read(void *destination, int length);
-int console_try_read(void *destination, int length);
 void trap_init(void);
 void usertrap(void) __attribute__((noreturn));
 void usertrapret(void) __attribute__((noreturn));

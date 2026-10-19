@@ -94,7 +94,7 @@ def run_syserr(report, tree, label):
     try:
         console.run("syserr")
         result = console.expect(r"SYSERR (\w+) failures=(\d+)")
-        report.check(label, "syscall 0 / 23 / -1 / unimplemented return -1; bad fd, "
+        report.check(label, "syscall 0 / 127 / -1 / unimplemented return -1; bad fd, "
                      "length, pointer, exec, wait rejected",
                      bool(result and result.group(1) == b"PASS"),
                      result.group(0).decode() if result else "no verdict")

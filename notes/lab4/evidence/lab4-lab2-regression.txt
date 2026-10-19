@@ -1,0 +1,15 @@
+lab2 self-tests (buffer=64, semantics=1)
+[PASS] T2-1 read(0, buf, 64) of a 64-byte line returns 64; overlong line keeps its newline; buffer recovers  (READCAP PASS overlong_total=67 overlong_calls=2)
+[PASS] T2-1 alive shell prompt returns after overflow
+[PASS] T2-2a empty buffer: read blocks instead of returning 0/-1
+[PASS] T2-2b stream mode (1): one key wakes the reader before Enter
+[PASS] T2-2 alive shell prompt returns
+[PASS] T2-3 syscall 0 / 127 / -1 / unimplemented return -1; bad fd, length, pointer, exec, wait rejected  (SYSERR PASS failures=0)
+[PASS] T2-3 alive kernel still runs programs afterwards
+[PASS] A1 ELF entry equals main in all 15 programs  (sh hi spin badecall bufstorm readcap readempty syserr badaccess memcap vmtest guardtest schedtest oomtest concurrent)
+[PASS] A2 (semantics=0) T2-1 read(0, buf, 64) of a 64-byte line returns 64; overlong line keeps its newline; buffer recovers  (READCAP PASS overlong_total=64 overlong_calls=1)
+[PASS] A2 (semantics=0) T2-1 alive shell prompt returns after overflow
+[PASS] A2 (semantics=0) T2-2a empty buffer: read blocks instead of returning 0/-1
+[PASS] A2 (semantics=0) T2-2b line mode (0): the reader wakes only after Enter
+[PASS] A2 (semantics=0) T2-2 alive shell prompt returns
+== 13 passed, 0 failed

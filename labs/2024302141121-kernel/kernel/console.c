@@ -17,6 +17,8 @@
 #error "LAB1_BANNER_PROTOCOL must be 0, 1, or 2"
 #endif
 
+static struct spinlock input_lock;
+
 static uint64 physical_bytes;
 static uint64 checksum;
 static int checksum_enabled;
@@ -77,6 +79,7 @@ uartputc_sync(uint8 byte)
 void
 console_init(void)
 {
+  initlock(&input_lock,"console input");
   physical_bytes = 0;
   checksum = 0;
   checksum_enabled = 0;
@@ -115,6 +118,7 @@ console_intr(void)
     if (byte == '\r')
       byte = '\n';
 
+    acquire(&input_lock);
     if (input.write_index - input.read_index < LAB2_BUF_SIZE) {
       input.data[input.write_index++ % LAB2_BUF_SIZE] = byte;
       if (byte == '\n')
@@ -130,7 +134,8 @@ console_intr(void)
       }
     }
 
-    proc_wake_input();
+    proc_wakeup(&input);
+    release(&input_lock);
 
     /* Echo is part of the console contract even if the ring is full. */
     console_putc(byte);
@@ -152,68 +157,26 @@ input_readable(void)
 #endif
 }
 
-/* Interrupts are off on entry and exit; wfi returns after any trap. */
-static void
-wait_for_input_event(void)
+/* Sleep preserves the C continuation and the already read byte count. */
+int console_read(void *destination, int length)
 {
-  intr_on();
-  asm volatile("wfi");
-  intr_off();
-}
-
-int
-console_read(void *destination, int length)
-{
-  uint8 *output = destination;
-  int count = 0;
-  int interrupts_were_enabled;
-
-  if (length <= 0)
-    return 0;
-
-  interrupts_were_enabled = intr_get();
-  intr_off();
-  while (!input_readable())
-    wait_for_input_event();
-
-  while (count < length) {
-    uint8 byte;
-
-    /* Only a multi-byte stream read can outrun the producer here. */
-    while (input.read_index == input.write_index)
-      wait_for_input_event();
-
-    byte = input.data[input.read_index++ % LAB2_BUF_SIZE];
-    output[count++] = byte;
-
-    /* console_intr() already maps '\r' to '\n'. */
-    if (byte == '\n') {
-      input.lines--;
-      break;
+  uint8 *output=destination; int count=0;
+  if(length<=0) return 0;
+  acquire(&input_lock);
+  while(!input_readable()) {
+    if(proc_killed()) { release(&input_lock); return -1; }
+    proc_sleep(&input,&input_lock);
+  }
+  while(count<length) {
+    while(input.read_index==input.write_index) {
+      if(proc_killed()) { release(&input_lock); return count ? count : -1; }
+      proc_sleep(&input,&input_lock);
     }
+    uint8 byte=input.data[input.read_index++%LAB2_BUF_SIZE];
+    output[count++]=byte;
+    if(byte=='\n') { input.lines--; break; }
   }
-
-  if (interrupts_were_enabled)
-    intr_on();
-  return count;
-}
-
-/* A blocked syscall restarts its ecall instead of retaining a C stack. */
-int
-console_try_read(void *destination, int length)
-{
-  uint8 *output = destination;
-  uint64 available_bytes = input.write_index - input.read_index;
-  int count = 0;
-  if (length <= 0) return 0;
-  if (!input_readable() ||
-      (length > 1 && !input.lines && available_bytes < (uint64)length)) return -2;
-  while (count < length && input.read_index != input.write_index) {
-    uint8 byte = input.data[input.read_index++ % LAB2_BUF_SIZE];
-    output[count++] = byte;
-    if (byte == '\n') { input.lines--; break; }
-  }
-  return count;
+  release(&input_lock); return count;
 }
 
 /* Emit one logical byte under the per-student line protocol. */

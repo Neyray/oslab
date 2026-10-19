@@ -1,0 +1,25 @@
+lab1 self-tests on /home/jerico/projects/oslab/labs/2024302141121-kernel (sid=2024302141121, protocol=2)
+[PASS] T1-1a %d of 0 prints a single digit  (got b'0')
+[PASS] T1-1b %d of INT_MIN (negative, no overflow)  (got b'-2147483648')
+[PASS] T1-1c %d of INT_MAX  (got b'2147483647')
+[PASS] T1-1d %s of an empty string prints nothing  (got b"''")
+[PASS] T1-1e %x of UINT_MAX: lowercase, 0x, no leading zero  (got b'0xffffffff')
+[PASS] T1-1f %s of an 80-byte string is complete  (got b'01234567890123456789012345678901234567890123456789012345678901234567890123456789')
+[PASS] T1-1g %d of -1  (got b'-1')
+[PASS] T1-1h %x of 0 still prints one digit  (got b'0x0')
+[PASS] T1-1i %ld of LONG_MIN  (got b'-9223372036854775808')
+[PASS] T1-1j %lu of ULONG_MAX  (got b'18446744073709551615')
+[PASS] T1-1k %s of a NULL pointer does not fault  (got b'(null)')
+[PASS] T1-1l %p prints 0x plus lowercase hex  (got b'0x80000000')
+[PASS] T1-1m %c  (got b'Z')
+[PASS] T1-1n %% prints one percent sign  (got b'%')
+[PASS] T1-1o an unknown conversion is echoed, not dropped  (got b'%q')
+[PASS] T1-2a line 1 has decimal sid and lowercase 0x mod97  (OSLAB1 sid=2024302141121 mod97=0x23)
+[PASS] T1-2b [chk=N] equals the host-side byte sum of the body  (host=12536 kernel=[chk=12536])
+[PASS] T1-2c the checksum line is the last banner line and ends in \n
+[PASS] T1-2d banner equals expect_banner.txt byte for byte  (205 bytes)
+[PASS] T1-2e protocol 0 build: same body, no checksum line
+[PASS] T1-2f protocol 1 build: '.' after every byte, newline included  (386 bytes)
+[PASS] A1 two cold boots print identical bytes
+[PASS] A2 -d int shows no synchronous fault during boot  (0 faults)
+== 23 passed, 0 failed

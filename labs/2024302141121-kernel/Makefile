@@ -8,10 +8,11 @@ QEMU = qemu-system-riscv64
 
 OBJS = kernel/entry.o kernel/start.o kernel/console.o kernel/printf.o \
        kernel/kalloc.o kernel/vm.o kernel/mmtest.o kernel/proc.o kernel/syscall.o kernel/trap.o kernel/kernelvec.o \
-       kernel/timervec.o kernel/trampoline.o kernel/userimg.o kernel/main.o
+       kernel/spinlock.o kernel/swtch.o kernel/timervec.o kernel/trampoline.o kernel/userimg.o kernel/main.o
 
 UPROGS = sh hi spin badecall bufstorm readcap readempty syserr badaccess memcap vmtest guardtest schedtest oomtest concurrent
 UPROGS += bench lottery_test stride_test
+UPROGS += mlfqtest schedabi alt
 
 UCOMMON = $(if $(wildcard user/common.c),user-flat/common.o)
 

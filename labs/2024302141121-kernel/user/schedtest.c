@@ -9,7 +9,8 @@ int main(void)
     printf("SCHED-CHILD\n");
     exit(6);
   }
-  while (uptime() - start < 8) for (volatile int i = 0; i < 1000; i++);
+  while (uptime() - start < 8) /* Keep the measured load in U mode for timer preemption. */
+    for (volatile int i = 0; i < 1000000; i++);
   printf("SCHED-PARENT-WAIT\n");
   if (wait(&status) == pid && status == 6) printf("SCHEDTEST PASS\n");
   else printf("SCHEDTEST FAIL status=%d\n", status);

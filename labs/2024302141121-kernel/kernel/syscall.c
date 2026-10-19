@@ -62,8 +62,7 @@ sys_read(void)
   if (requested > (int)sizeof(buffer))
     requested = sizeof(buffer);
   if (proc_validate(address, (uint64)requested, PTE_W) < 0) return -1;
-  received = console_try_read(buffer, requested);
-  if (received == -2) { proc_defer(PROC_INPUT); return 0; }
+  received = console_read(buffer, requested);
   if (received < 0 || proc_copyout(address, buffer, received) < 0)
     return -1;
   return received;
@@ -78,28 +77,11 @@ sys_exec(void)
   return proc_exec(name);
 }
 
-static int
-sys_pause(void)
-{
-  int duration = (int)argraw(0);
-  struct proc *p = myproc();
-  if (duration < 0) return -1;
-  if (!duration) return 0;
-  if (!p->sleep_until) p->sleep_until = ticks_read() + (uint64)duration;
-  if (ticks_read() < p->sleep_until) {
-    proc_defer(PROC_SLEEP);
-    return 0;
-  }
-  p->sleep_until = 0;
-  return 0;
-}
-
 void
 syscall(void)
 {
   struct proc *caller = myproc();
   int number = (int)caller->trapframe->a7;
-  uint64 dispatched_epc = caller->trapframe->epc;
   uint64 result;
 
   switch (number) {
@@ -128,7 +110,19 @@ syscall(void)
     result = caller->pid;
     break;
   case SYS_pause:
-    result = sys_pause();
+    result = ticks_pause((int)argraw(0));
+    break;
+  case SYS_kill:
+    result = proc_kill((int)argraw(0));
+    break;
+  case SYS_schedstat:
+    result = proc_schedstat((int)argraw(0),argraw(1),argraw(2));
+    break;
+  case SYS_time_rdtime:
+    result = r_time();
+    break;
+  case SYS_setickets:
+    result = proc_setickets((int)argraw(0));
     break;
   case SYS_uptime:
     result = (int)ticks_read();
@@ -141,7 +135,5 @@ syscall(void)
     break;
   }
 
-  if (myproc() == caller && caller->state == PROC_RUNNING &&
-      caller->trapframe->epc == dispatched_epc)
-    caller->trapframe->a0 = result;
+  caller->trapframe->a0 = result;
 }

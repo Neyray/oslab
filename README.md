@@ -79,7 +79,7 @@ python3 ~/projects/oslab/materials/preflight.py
 | lab1 | 裸机启动与输出 | 自实现 `printf` + banner | [notes/lab1/](notes/lab1/) | 实现、自测用例（`tests/lab1_selftest.py`）完成，待现场验收 |
 | lab2 | 陷入、系统调用与控制台驱动 | trap 处理中的 `printf("scause=%p sepc=%p")` | [notes/lab2/](notes/lab2/) | 实现、自测用例（`tests/lab2_selftest.py`）完成，待现场验收 |
 | lab3 | SV39 页表与物理内存管理 | `dump_pagetable` + Ctrl-P | [notes/lab3/](notes/lab3/) | 实现、官方测试、回滚自测与早期回归完成，待现场验收 |
-| lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | — | 未开始 |
+| lab4 | 进程状态机与调度器 | `schedstat` + `Ctrl-P` 进程快照 | [notes/lab4/](notes/lab4/) | 单核三级 MLFQ、官方/自写测试与历史回归完成，待现场验收 |
 | lab5 | 写时复制 COW 与系统调用 | `pmc(0)` / `pmc(1)` 计数 | — | 未开始 |
 | lab6 | 缓冲区缓存与日志文件系统 | `crash_at(stage)` 受控断电 | — | 未开始 |
 | lab7 | 综合故障排查与现场系统设计 | 上述全部 | — | 未开始 |
@@ -134,9 +134,9 @@ make
 
 只有 `reference/` 由 [.gitignore](.gitignore) 排除；`labs/2024302141121-kernel/` 属于本仓库正常版本控制范围。实验代码、设计笔记和材料因此可以在同一条历史中相互对应。
 
-当前代码树已完成 lab1、lab2 与 lab3；lab3 v2 增量包先单独提交，再实现动态内存管理。lab3 的设计问答、测试清单和真实测试输出见 [notes/lab3/](notes/lab3/)。预置文件（`kernel.ld`、`riscv.h`、`types.h`、`memlayout.h`、`course_sid.h`，以及增量包的 `trampoline.S`、`syscall.h`、用户库和 sh/hi/spin）不得修改；自测需要换参数时，一律在临时副本中修改。
+当前 lab4 分支已完成 lab1–lab4 的累积实现；main 暂保留 lab3。lab4 v2 增量包先单独提交并标记 lab4-start，再提交完整续体调度、三级 MLFQ、测试与笔记并标记 lab4-submit。设计问答、指令清单和实测证据见 [notes/lab4/](notes/lab4/)，lab3 的历史材料保留在 [notes/lab3/](notes/lab3/)。预置文件（`kernel.ld`、`riscv.h`、`types.h`、`memlayout.h`、`course_sid.h`，以及增量包的 `trampoline.S`、`swtch.S`、`syscall.h`、用户库和 sh/hi/spin）不得修改；自测需要换参数时，一律在临时副本中修改。
 
-课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。本主仓库已经完成 `git init`，后续不要在 `labs/` 内重复初始化；提交、标签和归档由学生本人操作。
+课程要求的四条 git 命令见 [学生须知 §四](docs/05-学生须知.md#四git-版本管理全学期只用四条命令)：`git init` / `git tag labN-submit` / `git archive` / `git push`。本主仓库已经完成 `git init`，后续不要在 `labs/` 内重复初始化；日常提交、标签和归档由学生本人操作；lab4 本轮根据用户明确授权，已由助手执行两轮本地提交与标签，并生成归档，未推送远端。
 
 ### 其他参考
 

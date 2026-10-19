@@ -1,0 +1,28 @@
+lab3 self-tests: official + boundary + rollback + regression
+[PASS] boot Shell starts
+[PASS] lab1 banner is byte-identical
+[PASS] dump ABI code/data/guard/stack/trapframe/trampoline permissions
+[PASS] badaccess TEST-3a PASS  (TEST-3a PASS)
+[PASS] badaccess alive shell returns
+[PASS] badaccess 3b beyond-sbrk process is killed
+[PASS] guardtest GUARDTEST PASS pages=\d+ failures=0  (GUARDTEST PASS pages=2 failures=0)
+[PASS] guardtest alive shell returns
+[PASS] cross-page write and read across nonadjacent physical pages
+[PASS] cross-page alive shell returns
+[PASS] schedtest SCHEDTEST PASS  (SCHEDTEST PASS)
+[PASS] schedtest alive shell returns
+[PASS] timer preemption child runs before parent waits
+[PASS] memcap TEST-4 PASS: OOM returned error after \d+ chunks;  (TEST-4 PASS: OOM returned error after 2028 chunks;)
+[PASS] memcap alive shell returns
+[PASS] oomtest OOMTEST PASS bytes=\d+\n  (OOMTEST PASS bytes=132935680
+)
+[PASS] oomtest alive shell returns
+[PASS] conservation no user page/table/trapframe leak after all programs  (32527 -> 32527; replay begins at line start)
+[PASS] spin + sh supplied spin progresses while supplied sh accepts hi
+[PASS] lab2 smoke official UART regression  (boot ok; EXPECT 'hi: user program running, pid=[0-9]+': PASS; EXPECT 'TEST-1 PASS': PASS; log → /tmp/lab3-smoke.log;EXPECT 失败 0 条)
+[PASS] lab2 bufstorm official UART regression  (boot ok; EXPECT 'BUFSTORM lines=4': PASS; log → /tmp/lab3-bufstorm.log;EXPECT 失败 0 条)
+[PASS] normal traps only ecall synchronous exceptions in hi/badecall  (0 unexpected faults)
+[PASS] MM order=0 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+[PASS] MM order=1 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+[PASS] MM order=2 allocator exhaustion + mapping/walk/growth rollback + copy permissions
+== 25 passed, 0 failed

@@ -34,10 +34,9 @@ main(void)
   char byte = 'x';
   char *argv[] = { "nosuch", 0 };
 
-  /* Syscall numbers just outside the defined 1..22 range, and one inside
-   * it that this lab does not implement. */
+  /* Unknown numbers stay outside the growing syscall table (lab4 adds 23..25). */
   EXPECT("syscall 0", ECALL_RAW(0), -1);
-  EXPECT("syscall 23", ECALL_RAW(SYS_sync + 1), -1);
+  EXPECT("syscall 127", ECALL_RAW(127), -1);
   EXPECT("syscall -1", ECALL_RAW(-1), -1);
   EXPECT("unimplemented open", open("x", 0), -1);
 

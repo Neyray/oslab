@@ -1,0 +1,24 @@
+OSLAB1 sid=2024302141121 mod97=0x23
+selftest zero=0 neg=-2147483648 max=2147483647 empty='' hex=0xffffffff long=01234567890123456789012345678901234567890123456789012345678901234567890123456789
+[chk=12536]
+DUMP-PAGETABLE begin
+L2 va=0x0 pa=0x84025000 perm=----
+L1 va=0x0 pa=0x84077000 perm=----
+LEAF va=0x0 pa=0x84076000 perm=r-xu
+LEAF va=0x1000 pa=0x84024000 perm=rw-u
+LEAF va=0x4000 pa=0x84078000 perm=rw-u
+L2 va=0x3fc0000000 pa=0x84075000 perm=----
+L1 va=0x3fffe00000 pa=0x84026000 perm=----
+LEAF va=0x3fffffe000 pa=0x84029000 perm=rw--
+LEAF va=0x3ffffff000 pa=0x80003000 perm=r-x-
+DUMP-PAGETABLE end
+lab3 ready: order=2 guard=2 reserve=1 free=32527
+lab2 ready: tick=3 buffer=64 semantics=1
+sh> bench
+RESULT avg_fork_wait = 6786
+RESULT concurrent_children = 8
+PASS: bench
+sh> alt
+AABBBBBBBBBAAAAAAAAAAAAAABBBBBBB
+alt done
+sh>

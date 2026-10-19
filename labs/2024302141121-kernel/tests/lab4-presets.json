@@ -1,0 +1,17 @@
+{
+  "source": "lab3-submit historical preset bytes; lab4 replacements are checked against materials/lab4-v2-20261009/gifts separately",
+  "sha256": {
+    "kernel/kernel.ld": "3fba526f46dcca1f08220be42fc9591c4efc21fe2324877f0059c1d2fe7f6d08",
+    "kernel/riscv.h": "9eb588fbe0d0476dccf2ecd4b453090d3fcb657031550f94e62860d5608147bd",
+    "kernel/types.h": "a6ffb66b15fc425ae06c109afb910bd2985b341b373be20d2fbf24a798d9f62c",
+    "kernel/memlayout.h": "85f596a0821fab4c15eccc34e294230c96b71731d97d575f842e455abced2d5a",
+    "kernel/course_sid.h": "e32efb99e8ac9b0e0a9d49fb3f9172d06dbcccdc11a708c332705af174909ad2",
+    "kernel/trampoline.S": "c3e6f230ed2f828e82571efe687930ecb5e5ef1454679b91fa4247d6bb896c1e",
+    "user/user.ld": "6cae654c2aeb896220bd0e3148071bde950949a431307c38ce53dbd22ad0ea6e",
+    "user/printf.c": "8c98780668f6418103de788fa8f2c2d16ed419de95a4484e20fe9531194ccbca",
+    "user/ulib.c": "0bb30cebbd735f730e335e807742e0d20ddf5779d534714f558a606aac2d7a4b",
+    "user/sh.c": "2b523461401d5adfb47f51d47df62be8b26e84b91f0b4c877b6805f701d376c3",
+    "user/hi.c": "95bddbe0d05247c0f36552d7f7ec82c17d3733cf26ce2e1d28c333048c946b26",
+    "user/spin.c": "9330f43452e227ceca5720c1e97f8302e715092cf0ca8bc943312351ae62c0d4"
+  }
+}

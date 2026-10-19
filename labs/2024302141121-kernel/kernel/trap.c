@@ -16,7 +16,8 @@ extern char uservec[];
 extern char userret[];
 extern char kernelvec[];
 
-static volatile uint64 ticks;
+static uint64 ticks;
+static struct spinlock tickslock;
 
 static uint64
 trampoline_address(char *symbol)
@@ -43,8 +44,10 @@ device_interrupt(uint64 cause)
     return 0;
   if (code == IRQ_S_SOFTWARE) {
     w_sip(r_sip() & ~2UL);
+    acquire(&tickslock);
     ticks++;
-    proc_wake_ticks(ticks);
+    proc_wakeup(&ticks);
+    release(&tickslock);
     return 1;
   }
   if (code == IRQ_S_EXTERNAL) {
@@ -67,13 +70,29 @@ trap_init(void)
   plic_init();
   console_enable_interrupts();
   ticks = 0;
+  initlock(&tickslock,"ticks");
   w_sie(r_sie() | SIE_SEIE | SIE_SSIE);
 }
 
 uint64
 ticks_read(void)
 {
-  return ticks;
+  acquire(&tickslock);
+  uint64 now=ticks;
+  release(&tickslock);
+  return now;
+}
+
+int ticks_pause(int duration)
+{
+  if(duration<0) return -1;
+  acquire(&tickslock);
+  uint64 start=ticks;
+  while(ticks-start<(uint64)duration) {
+    if(proc_killed()) { release(&tickslock); return -1; }
+    proc_sleep(&ticks,&tickslock);
+  }
+  release(&tickslock); return 0;
 }
 
 void
@@ -86,15 +105,18 @@ usertrap(void)
 
   if (cause == 8) {
     process->trapframe->epc += 4;
+    if(proc_killed()) proc_exit(-1);
+    intr_on();
     syscall();
   } else if (!device_interrupt(cause)) {
     printf("user trap: scause=%p sepc=%p stval=%p\n", (void *)cause,
            (void *)r_sepc(), (void *)r_stval());
     proc_exit(-1);
   } else if ((cause & SCAUSE_CODE_MASK) == IRQ_S_SOFTWARE) {
-    proc_yield();
+    proc_tick();
   }
 
+  if(proc_killed()) proc_exit(-1);
   usertrapret();
 }
 
